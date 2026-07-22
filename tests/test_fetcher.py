@@ -106,6 +106,41 @@ def test_post_rispetta_il_rate_limiting(monkeypatch):
     assert atteso, "la seconda richiesta e' partita senza attendere"
 
 
+# --- auto-throttle adattivo ---------------------------------------------
+
+def test_allarga_ritardo_su_429(monkeypatch):
+    """Un 429 deve allargare il ritardo di base, non lasciarlo fisso: e'
+    proprio quando il sito da' segnali di stress che serve rallentare di piu'."""
+    f = Fetcher(min_delay=0, max_delay=1.0, max_retries=1)
+    monkeypatch.setattr(time, "sleep", lambda *_: None)
+    monkeypatch.setattr(f.session, "request",
+                        lambda *a, **k: _resp(b"", "text/html", 429))
+    with pytest.raises(FetchError):
+        f.get("http://x")
+    assert f._delay_base > 1.0
+
+
+def test_restringi_ritardo_su_risposta_pulita(monkeypatch):
+    """Una risposta pulita restringe il ritardo verso il minimo, cosi' un run
+    lungo senza problemi non resta rallentato dal picco di stress iniziale."""
+    f, _ = _fetcher_che_registra(monkeypatch, [_resp(b"ok", "text/html")])
+    f._delay_base = 2.0
+    f.get("http://x")
+    assert f._delay_base < 2.0
+
+
+def test_ritardo_di_base_resta_entro_min_e_tetto():
+    f = Fetcher(min_delay=0.5, max_delay=2.0)
+    for _ in range(30):
+        f._allarga_ritardo()
+    assert f._delay_base == f._delay_tetto
+
+    f._delay_base = f._delay_tetto
+    for _ in range(50):
+        f._restringi_ritardo()
+    assert f._delay_base == f.min_delay
+
+
 def test_headers_della_risposta_disponibili(monkeypatch):
     """`content-range` vive negli header: senza, la paginazione di Doctolib non
     saprebbe mai quando fermarsi."""

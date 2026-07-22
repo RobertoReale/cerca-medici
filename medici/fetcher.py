@@ -166,16 +166,30 @@ class Fetcher:
         self.session.headers.update(DEFAULT_HEADERS)
         self.rileva_blocco = rileva_blocco or self.looks_blocked
         self._last_request_ts: Optional[float] = None
+        # Auto-throttle: il ritardo base parte da max_delay (il peggiore dei due
+        # estremi configurati) e si muove entro [min_delay, tetto adattivo] in
+        # base a come risponde il sito, invece di restare fisso per tutto il
+        # run. Un 429/5xx allarga il ritardo proprio quando il sito da' segnali
+        # di stress; una sequenza di risposte pulite lo restringe di nuovo.
+        self._delay_base = max_delay
+        self._delay_tetto = max_delay * 3
 
     # -- rate limiting -------------------------------------------------------
     def _respect_rate_limit(self) -> None:
         if self._last_request_ts is None:
             return
-        wait = random.uniform(self.min_delay, self.max_delay)
+        wait = random.uniform(self.min_delay, self._delay_base) if \
+            self._delay_base > self.min_delay else self.min_delay
         elapsed = time.monotonic() - self._last_request_ts
         remaining = wait - elapsed
         if remaining > 0:
             time.sleep(remaining)
+
+    def _allarga_ritardo(self) -> None:
+        self._delay_base = min(self._delay_base * 1.5, self._delay_tetto)
+
+    def _restringi_ritardo(self) -> None:
+        self._delay_base = max(self._delay_base * 0.9, self.min_delay)
 
     # -- blocco soft ---------------------------------------------------------
     @staticmethod
@@ -228,12 +242,14 @@ class Fetcher:
                 self._last_request_ts = time.monotonic()
             except (requests.Timeout, requests.ConnectionError) as e:
                 last_exc = e
+                self._allarga_ritardo()
                 if not self._sleep_before_retry(attempt, url, f"timeout/conn: {e}"):
                     break
                 continue
 
             if resp.status_code in RETRY_STATUS:
                 last_exc = FetchError(f"HTTP {resp.status_code}", resp.status_code)
+                self._allarga_ritardo()
                 if not self._sleep_before_retry(attempt, url,
                                                 f"HTTP {resp.status_code}", resp):
                     break
@@ -242,6 +258,7 @@ class Fetcher:
             if resp.status_code >= 400:
                 raise FetchError(f"HTTP {resp.status_code} su {url}", resp.status_code)
 
+            self._restringi_ritardo()
             html = self._decode(resp)
             if self.rileva_blocco(html):
                 raise BlockedError(

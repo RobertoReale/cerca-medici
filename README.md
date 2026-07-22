@@ -36,7 +36,7 @@ in una riga sola con i prezzi affiancati (`--unifica`).
   ciascun portale (vedi [Unificare i duplicati](#unificare-i-duplicati---unifica)).
 - **Ordinamento/filtri**: prezzo (crescente, NULL in coda), rating, numero
   recensioni, prima disponibilità, distanza da un punto (lat,lng).
-- **Storage** SQLite + export CSV.
+- **Storage** SQLite + export CSV o JSON Lines.
 - **Due interfacce**: CLI (`cerca.py`) e GUI Streamlit (`app.py`), che
   condividono lo stesso motore di query (nessuna logica duplicata).
 
@@ -99,6 +99,11 @@ python cerca.py cerca --specializzazione cardiologo --citta Milano --unifica
 
 # Esporta il risultato filtrato in CSV
 python cerca.py cerca --specializzazione podologo --citta Milano --ordina prezzo --export risultati.csv
+
+# Esporta in JSON Lines (formato scelto dall'estensione): un oggetto per riga,
+# cosi' un export interrotto a meta' resta comunque leggibile fino all'ultima
+# riga completa
+python cerca.py cerca --specializzazione podologo --citta Milano --ordina prezzo --export risultati.jsonl
 ```
 
 Opzioni utili: `--fonte`, `--unifica`, `--solo-con-prezzo`,
@@ -130,7 +135,8 @@ streamlit run app.py
 ```
 
 Form con gli stessi filtri della CLI, selezione dei portali sia in scraping sia
-in consultazione, tabella con ordinamento nativo per colonna, export CSV. Gira
+in consultazione, tabella con ordinamento nativo per colonna, export CSV o
+JSON Lines. Gira
 solo in locale, nessun deployment.
 
 Gli identificativi interni, le coordinate e i timestamp restano nascosti dietro
@@ -147,7 +153,7 @@ medici/
   testo.py            slugify condiviso (accenti, separatori) + console UTF-8
   fetcher.py          requests + rate limiting 1-3s, retry/backoff, get() e post(), rilevamento blocco
   scraper.py          Paginazione, retry, annullamento, sostituzione dei dati vecchi — non sa di che sito parla
-  storage.py          SQLite (tabelle risultati + disponibilita) + export CSV + migrazioni
+  storage.py          SQLite (tabelle risultati + disponibilita) + export CSV/JSONL + migrazioni
   query_engine.py     Logica condivisa CLI/GUI: filtri, ordinamento, haversine
   unifica.py          Cluster cross-portale: stesso cognome + sedi entro 150 m
 
@@ -292,9 +298,12 @@ sparire i dati già raccolti.
 
 ### Robustezza
 
-- **Rate limiting**: pausa randomizzata 1–3 s tra le richieste, retry con backoff
-  su 429/5xx. Se un sito risponde con una challenge/captcha, lo scraper **si
-  ferma** su quel portale invece di ritentare all'infinito.
+- **Rate limiting adattivo**: pausa randomizzata tra le richieste, retry con
+  backoff su 429/5xx. Il ritardo di base non è fisso: si allarga quando il
+  sito risponde 429/5xx/timeout e si restringe quando torna a rispondere
+  pulito, restando comunque tra `min_delay` e un tetto (3× `max_delay`). Se un
+  sito risponde con una challenge/captcha, lo scraper **si ferma** su quel
+  portale invece di ritentare all'infinito.
 - **Doctolib non risponde 404 a una ricerca che non riconosce: redirige.** Una
   città sconosciuta finisce su una ricerca nazionale che restituisce medici
   *veri* di Milano — dati plausibili e sbagliati. Lo scraper riconosce il

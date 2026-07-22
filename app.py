@@ -345,11 +345,20 @@ st.dataframe(df, width="stretch", hide_index=True,
                           "niente agenda online, si prenota per telefono."),
              })
 
-st.download_button(
+col_csv, col_jsonl = st.columns(2)
+col_csv.download_button(
     "⬇️ Esporta CSV",
     data=df.to_csv(index=False).encode("utf-8-sig"),
     file_name=f"medici_{f_ordina}.csv",
     mime="text/csv",
+)
+col_jsonl.download_button(
+    "⬇️ Esporta JSON Lines",
+    data=df.to_json(orient="records", lines=True, force_ascii=False),
+    file_name=f"medici_{f_ordina}.jsonl",
+    mime="application/x-ndjson",
+    help="Un oggetto per riga: un file interrotto a metà scaricamento resta "
+         "comunque leggibile fino all'ultima riga completa.",
 )
 
 st.caption(f"Prezzo pubblicato: {s['con_prezzo']} risultati su {s['totale']}. "

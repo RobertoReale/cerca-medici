@@ -1,5 +1,7 @@
 """Regressioni sulla paginazione: una pagina vuota transitoria non deve
 troncare silenziosamente la raccolta."""
+import json
+
 from medici.fetcher import FetchError, FetchResult
 from medici.scraper import scrape_search
 from medici.storage import Storage
@@ -196,3 +198,17 @@ def test_export_csv_accetta_dict(tmp_path):
     assert n == 1
     assert testo.splitlines()[0] == "nome,prezzo"
     assert "Dr. À" in testo
+
+
+def test_export_jsonl_accetta_dict(tmp_path):
+    """Un oggetto per riga, senza BOM: a differenza del CSV (per Excel), un
+    file JSONL interrotto a metà resta leggibile fino all'ultima riga intera."""
+    out = tmp_path / "x.jsonl"
+    n = Storage.export_rows_jsonl(
+        [{"nome": "Dr. À", "prezzo": 50}, {"nome": "Dr. Bianchi", "prezzo": 30}], out)
+    testo = out.read_text(encoding="utf-8")
+    assert n == 2
+    assert not testo.startswith("﻿")
+    righe = [json.loads(r) for r in testo.splitlines()]
+    assert righe == [{"nome": "Dr. À", "prezzo": 50}, {"nome": "Dr. Bianchi", "prezzo": 30}]
+    assert "Dr. À" in testo, "ensure_ascii=False: niente escape \\u00c0"

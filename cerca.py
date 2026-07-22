@@ -238,9 +238,14 @@ def cmd_cerca(args) -> int:
                 "le righe grezze, una per fonte.")
 
     if args.export:
-        # Un solo punto di verita' per il CSV (BOM incluso, per Excel):
-        # qui c'era una seconda implementazione che poteva divergere.
-        n = Storage.export_rows_csv(results, args.export)
+        # Un solo punto di verita' per formato (CSV con BOM per Excel, o
+        # JSONL): qui c'era una seconda implementazione che poteva divergere.
+        # L'estensione sceglie il formato: .jsonl/.ndjson -> JSON Lines,
+        # altrimenti CSV.
+        if args.export.lower().endswith((".jsonl", ".ndjson")):
+            n = Storage.export_rows_jsonl(results, args.export)
+        else:
+            n = Storage.export_rows_csv(results, args.export)
         print(f"Esportato: {args.export} ({n} righe)")
     return 0
 
@@ -319,7 +324,9 @@ def build_parser() -> argparse.ArgumentParser:
                          "colonna «Disponibile su» li elenca tutti")
     ce.add_argument("--vicino-a", default=None, help="lat,lng per ordinare per distanza")
     ce.add_argument("--limite", type=int, default=None)
-    ce.add_argument("--export", default=None, help="Esporta i risultati in CSV")
+    ce.add_argument("--export", default=None,
+                    help="Esporta i risultati: .csv per CSV (default), "
+                         ".jsonl/.ndjson per JSON Lines")
     ce.set_defaults(func=cmd_cerca)
     return p
 

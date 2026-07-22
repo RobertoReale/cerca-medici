@@ -12,6 +12,7 @@ sovrascriverebbe o cancellerebbe le righe di un altro.
 from __future__ import annotations
 
 import csv
+import json
 import sqlite3
 import threading
 from pathlib import Path
@@ -408,4 +409,20 @@ class Storage:
             w.writerow(cols)
             for r in rows:
                 w.writerow([r[c] for c in cols])
+        return len(rows)
+
+    @staticmethod
+    def export_rows_jsonl(rows: Sequence, path: Path) -> int:
+        """Scrive le righe in JSON Lines (un oggetto per riga, senza BOM):
+        un run interrotto lascia comunque un file leggibile fino all'ultima
+        riga scritta, e piu' run si concatenano senza dover rileggere tutto."""
+        path = Path(path)
+        if not rows:
+            path.write_text("", encoding="utf-8")
+            return 0
+        cols = rows[0].keys()
+        with path.open("w", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps({c: r[c] for c in cols}, ensure_ascii=False))
+                f.write("\n")
         return len(rows)
