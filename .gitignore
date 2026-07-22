@@ -13,6 +13,7 @@ env/
 *.sqlite
 *.sqlite3
 export_*.csv
+dati_esportati_esempio/
 pagina_test.html
 *.debug.html
 
