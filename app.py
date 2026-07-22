@@ -23,8 +23,10 @@ from medici.sorgenti import elenco as sorgenti_disponibili, etichetta_di
 logging.basicConfig(level=logging.INFO,
                     format="%(levelname)s %(name)s: %(message)s")
 
-st.set_page_config(page_title="Ricerca medici con prezzi", layout="wide")
-st.title("🩺 Ricerca medici con prezzi e disponibilità")
+# Stesso nome della repo e della CLI: la tab del browser e il titolo in pagina
+# devono far riconoscere il progetto, non descriverlo.
+st.set_page_config(page_title="Cerca medici", layout="wide")
+st.title("🩺 Cerca medici")
 
 
 @st.cache_resource
@@ -66,6 +68,44 @@ def annullamento_richiesto() -> bool:
     except Exception:
         return False
 
+
+# Quale sottoinsieme del database sta guardando l'utente. La tabella mostra
+# tutte le ricerche insieme, quindi dopo aver scaricato «dentista» le sue righe
+# arriverebbero in mezzo a quelle di «podologo»: questa vista le separa senza
+# cancellare niente dal DB (riscaricarle costa ore di richieste ai portali).
+VISTA_TUTTO = None          # tutte le ricerche presenti
+VISTA_VUOTA = "__vuota__"   # nessuna: tabella pulita, in attesa di una ricerca
+
+# I widget della sezione «2. Filtri»: senza una `key` Streamlit non permette di
+# riportarli al default.
+_CHIAVI_FILTRI = (
+    "f_fonti", "f_spec", "f_citta", "f_serv", "f_serv_scelto", "f_prezzo_min",
+    "f_prezzo_max", "f_ordina", "f_desc", "f_min_rec", "f_min_rating",
+    "f_solo_prezzo", "f_solo_pren", "f_unifica", "f_entro", "f_vicino",
+    "f_limite", "mostra_tecniche")
+
+
+def azzera_filtri() -> None:
+    """Riporta i filtri ai default cancellando le loro chiavi.
+
+    Va fatto in un callback, cioe' PRIMA che i widget vengano ricreati:
+    assegnare st.session_state["f_spec"] dopo averlo istanziato solleva
+    StreamlitAPIException.
+    """
+    for chiave in _CHIAVI_FILTRI:
+        st.session_state.pop(chiave, None)
+
+
+def nuova_ricerca() -> None:
+    azzera_filtri()
+    st.session_state["vista"] = VISTA_VUOTA
+
+
+st.sidebar.button(
+    "🔄 Nuova ricerca da zero", on_click=nuova_ricerca, width="stretch",
+    help="Svuota la tabella e azzera i filtri, per ripartire con un'altra "
+         "specializzazione. I dati già scaricati restano nel database e si "
+         "rivedono con un clic: non serve rifare lo scraping.")
 
 st.sidebar.header("1. Scraping (popola il DB)")
 with st.sidebar.form("scrape_form"):
@@ -170,6 +210,12 @@ elif submitted:
                 msg += f" {rep.slot} slot di disponibilità."
             st.success(msg)
 
+    # Chi ha appena scaricato «dentista» vuole vedere i dentisti, non ritrovarli
+    # sparsi in mezzo ai podologi di ieri. Le altre ricerche restano nel DB, a un
+    # clic di distanza.
+    if any(rep.righe for rep in reports):
+        st.session_state["vista"] = (sc_spec, sc_citta)
+
 
 storage = storage_corrente()
 
@@ -184,52 +230,62 @@ if gia_presenti:
                    "richiesta al sito.")
 
 st.sidebar.header("2. Filtri di ricerca")
+st.sidebar.button(
+    "🧹 Azzera solo i filtri", on_click=azzera_filtri, width="stretch",
+    help="Riporta i filtri qui sotto ai valori iniziali senza toccare la "
+         "tabella né il database.")
+
 # Le opzioni sono i portali PRESENTI NEL DB, non quelli registrati: offrire un
 # filtro su una fonte mai scaricata darebbe solo zero risultati.
 _fonti_db = [] if _MANCANTI else storage.sorgenti_presenti()
 f_fonti = st.sidebar.multiselect(
-    "Fonti", _fonti_db, default=_fonti_db, format_func=etichetta_di,
+    "Fonti", _fonti_db, default=_fonti_db, format_func=etichetta_di, key="f_fonti",
     help="Deseleziona un portale per escluderlo dai risultati mostrati.")
 if _fonti_db and not f_fonti:
     # Senza questo avviso l'unico segnale sarebbe un generico "nessun risultato",
     # con tutti gli altri filtri sotto accusa al posto di quello giusto.
     st.sidebar.warning("Nessuna fonte selezionata: non c'è nulla da mostrare.")
-f_spec = st.sidebar.text_input("Specializzazione (filtro)", value="")
-f_citta = st.sidebar.text_input("Città (filtro)", value="")
+f_spec = st.sidebar.text_input("Specializzazione (filtro)", value="", key="f_spec")
+f_citta = st.sidebar.text_input("Città (filtro)", value="", key="f_citta")
 f_serv = st.sidebar.text_input(
-    "Servizio (parole chiave)", value="",
+    "Servizio (parole chiave)", value="", key="f_serv",
     help="Cerca per parole, in qualsiasi ordine: «visita controllo» trova sia "
          "«Visita podologica di controllo» sia «Visita di controllo podologica».")
 servizi = [] if _MANCANTI else storage.servizi_noti()
 if servizi:
     scelto = st.sidebar.selectbox("…oppure scegli tra quelli trovati",
-                                  ["—"] + servizi)
+                                  ["—"] + servizi, key="f_serv_scelto")
     if scelto != "—" and not f_serv:
         f_serv = scelto
 c_min, c_max = st.sidebar.columns(2)
-f_prezzo_min = c_min.number_input("Prezzo min €", 0, 5000, 0, 10)
-f_prezzo_max = c_max.number_input("Prezzo max € (0=off)", 0, 5000, 0, 10)
+f_prezzo_min = c_min.number_input("Prezzo min €", 0, 5000, 0, 10, key="f_prezzo_min")
+f_prezzo_max = c_max.number_input("Prezzo max € (0=off)", 0, 5000, 0, 10,
+                                  key="f_prezzo_max")
 f_ordina = st.sidebar.selectbox(
-    "Ordina per", ["prezzo", "rating", "recensioni", "disponibilita", "distanza"])
+    "Ordina per", ["prezzo", "rating", "recensioni", "disponibilita", "distanza"],
+    key="f_ordina")
 f_desc = st.sidebar.checkbox(
-    "Inverti ordinamento",
+    "Inverti ordinamento", key="f_desc",
     help="Prezzo: dal più caro. Rating/recensioni: dal peggiore.")
-f_min_rec = st.sidebar.slider("Min recensioni", 0, 1000, 0, 10)
-f_min_rating = st.sidebar.slider("Min rating", 0.0, 5.0, 0.0, 0.5)
-f_solo_prezzo = st.sidebar.checkbox("Solo con prezzo pubblicato")
+f_min_rec = st.sidebar.slider("Min recensioni", 0, 1000, 0, 10, key="f_min_rec")
+f_min_rating = st.sidebar.slider("Min rating", 0.0, 5.0, 0.0, 0.5, key="f_min_rating")
+f_solo_prezzo = st.sidebar.checkbox("Solo con prezzo pubblicato", key="f_solo_prezzo")
 f_solo_pren = st.sidebar.checkbox(
-    "Solo prenotabili online",
+    "Solo prenotabili online", key="f_solo_pren",
     help="Esclude chi è elencato con il listino ma non ha attivato l'agenda "
          "su MioDottore (sul profilo appare «Inattivo»: si prenota per telefono).")
 f_unifica = st.sidebar.checkbox(
-    "Unisci lo stesso medico tra portali",
+    "Unisci lo stesso medico tra portali", key="f_unifica",
     help="Fonde in una riga sola le schede che i due portali hanno dello stesso "
          "medico (stesso cognome, sedi a meno di 150 m). Il prezzo mostrato è "
          "il minimo; la colonna «disponibile_su» elenca quanto chiede ciascun "
          "portale. Togli la spunta per rivedere le righe grezze.")
-f_entro = st.sidebar.number_input("Disponibile entro (giorni, 0=off)", 0, 30, 0)
-f_vicino = st.sidebar.text_input("Vicino a (lat,lng) per distanza", value="")
-f_limite = st.sidebar.number_input("Limite risultati (0=tutti)", 0, 5000, 100)
+f_entro = st.sidebar.number_input("Disponibile entro (giorni, 0=off)", 0, 30, 0,
+                                  key="f_entro")
+f_vicino = st.sidebar.text_input("Vicino a (lat,lng) per distanza", value="",
+                                 key="f_vicino")
+f_limite = st.sidebar.number_input("Limite risultati (0=tutti)", 0, 5000, 100,
+                                   key="f_limite")
 
 
 def _vicino():
@@ -249,9 +305,29 @@ if storage.count_risultati() == 0:
     st.info("Il database è vuoto. Usa il pannello di scraping a sinistra per iniziare.")
     st.stop()
 
+_vista = st.session_state.get("vista", VISTA_TUTTO)
+if _vista == VISTA_VUOTA:
+    st.info("Tabella pulita. Imposta una nuova ricerca nel pannello a sinistra "
+            "e premi **Avvia scraping**.")
+    # Senza questa via di ritorno «pulisci» sarebbe indistinguibile da
+    # «cancella»: i dati ci sono ancora, ma l'utente non avrebbe modo di saperlo.
+    st.button("Rivedi i dati già nel database",
+              on_click=lambda: st.session_state.update(vista=VISTA_TUTTO))
+    st.stop()
+# Da qui in poi la vista e' solo «tutto» (None) o una coppia (spec, citta):
+# il caso «vuota» e' gia' uscito con st.stop() qui sopra.
+vista: tuple | None = _vista if isinstance(_vista, tuple) else None
+if vista is not None:
+    riga, tasto = st.columns([4, 1])
+    riga.caption(f"Stai vedendo solo la ricerca **{vista[0]} / {vista[1]}**. "
+                 "Le altre sono comunque nel database.")
+    tasto.button("Mostra tutte le ricerche", width="stretch",
+                 on_click=lambda: st.session_state.update(vista=VISTA_TUTTO))
+
 filtro = Filtro(
     specializzazione=f_spec or None,
     citta=f_citta or None,
+    ricerca=vista,
     servizio=f_serv or None,
     # Tutte selezionate = nessun filtro: evita una IN(...) inutile e lascia
     # passare eventuali fonti dismesse ancora presenti nel DB.
@@ -290,6 +366,27 @@ if f_unifica:
     colonne[3].metric("Su più portali",
                       sum(1 for r in results if (r.get("n_fonti") or 1) > 1))
 
+# Con la sidebar lunga, i filtri attivi finiscono sotto la piega: chi guarda
+# solo la tabella non ha modo di sapere che sta vedendo un sottoinsieme, e
+# attribuisce allo scraping dei risultati mancanti che ha escluso da solo.
+_attivi = [etichetta for attivo, etichetta in (
+    (f_spec, f"specializzazione «{f_spec}»"),
+    (f_citta, f"città «{f_citta}»"),
+    (f_serv, f"servizio «{f_serv}»"),
+    (_fonti_db and set(f_fonti) != set(_fonti_db),
+     f"solo {len(f_fonti)} portali su {len(_fonti_db)}"),
+    (f_prezzo_min, f"da {f_prezzo_min} €"),
+    (f_prezzo_max, f"fino a {f_prezzo_max} €"),
+    (f_min_rec, f"min {f_min_rec} recensioni"),
+    (f_min_rating, f"min {f_min_rating} di rating"),
+    (f_solo_prezzo, "solo con prezzo"),
+    (f_solo_pren, "solo prenotabili online"),
+    (f_entro, f"disponibili entro {f_entro} giorni"),
+) if attivo]
+if _attivi:
+    st.caption("Filtri attivi: " + " · ".join(_attivi)
+               + " — «Azzera i filtri» nella barra a sinistra li toglie tutti.")
+
 if not results:
     st.warning("Nessun risultato con questi filtri.")
     st.stop()
@@ -314,7 +411,7 @@ TECNICHE = ("id", "result_id", "address_id", "servizio_id", "lat", "lng",
             "query_specializzazione", "query_citta", "data_scraping",
             "prezzo_raw", "n_fonti")
 if not st.checkbox("Mostra le colonne tecniche (id, coordinate, data di "
-                   "scraping)", value=False):
+                   "scraping)", value=False, key="mostra_tecniche"):
     df = df.drop(columns=[c for c in TECNICHE if c in df.columns])
 
 # `width="stretch"` e non `use_container_width=True`: quest'ultimo e' deprecato
@@ -354,7 +451,10 @@ col_csv.download_button(
 )
 col_jsonl.download_button(
     "⬇️ Esporta JSON Lines",
-    data=df.to_json(orient="records", lines=True, force_ascii=False),
+    # `or ""`: senza un file di destinazione `to_json` restituisce sempre la
+    # stringa, ma e' dichiarato Optional (scrivendo su file torna None) e
+    # `download_button` non accetta None.
+    data=df.to_json(orient="records", lines=True, force_ascii=False) or "",
     file_name=f"medici_{f_ordina}.jsonl",
     mime="application/x-ndjson",
     help="Un oggetto per riga: un file interrotto a metà scaricamento resta "

@@ -29,6 +29,13 @@ _STOPWORD = {"di", "del", "dello", "della", "dei", "degli", "delle", "e", "ed",
 class Filtro:
     specializzazione: Optional[str] = None
     citta: Optional[str] = None
+    # Restringe a UN singolo scaricamento: la coppia (specializzazione, citta)
+    # con cui e' stata lanciata la ricerca, confrontata esatta. Non e' un doppione
+    # dei due campi qui sopra: quelli allargano (`query_citta = 'Milano' OR
+    # citta LIKE '%Milano%'`), quindi dopo aver cercato sia podologo sia dentista
+    # a Milano tornerebbero righe di entrambi. Serve a mostrare "solo l'ultima
+    # ricerca" senza cancellare le altre dal database.
+    ricerca: Optional[tuple] = None
     servizio: Optional[str] = None            # match a parole sul nome servizio
     # Da quali portali pescare. None = tutti quelli presenti nel DB: e' il
     # comportamento giusto di default, perche' l'utente che ha scaricato da due
@@ -123,6 +130,9 @@ def _build_where(f: Filtro) -> tuple[str, list]:
         else:
             clauses.append("sorgente IN (%s)" % ",".join("?" * len(f.sorgenti)))
             params += list(f.sorgenti)
+    if f.ricerca:
+        clauses.append("query_specializzazione = ? AND query_citta = ?")
+        params += [f.ricerca[0], f.ricerca[1]]
     if f.specializzazione:
         clauses.append("(query_specializzazione = ? OR specializzazione LIKE ?)")
         params += [f.specializzazione, f"%{f.specializzazione}%"]

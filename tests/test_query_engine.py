@@ -34,6 +34,26 @@ def test_servizio_trova_le_varianti_del_nome(tmp_path):
     assert "Ortesi in silicone" not in trovati
 
 
+def test_ricerca_isola_un_solo_scaricamento(tmp_path):
+    """`ricerca` deve tenere fuori le righe delle ALTRE ricerche sulla stessa
+    citta': e' cio' che permette alla GUI di mostrare solo l'ultima ricerca senza
+    cancellare le precedenti. Il filtro `specializzazione` non basterebbe, perche'
+    allarga con un LIKE sulla specializzazione della riga."""
+    st = _db(tmp_path, [("Ortesi", 30.0)])
+    st.conn.execute(
+        "INSERT INTO risultati (result_id,address_id,nome,servizio,prezzo,"
+        "specializzazione,query_specializzazione,query_citta) "
+        "VALUES ('9','9','Dr. Denti','Igiene',60.0,'dentista','dentista','Milano')")
+    st.conn.commit()
+
+    solo_podologi = search(st, Filtro(ricerca=("podologo", "Milano")))
+    tutti = search(st, Filtro())
+    st.close()
+
+    assert [r["nome"] for r in solo_podologi] == ["Dr. 0"]
+    assert len(tutti) == 2
+
+
 # --- avvisi: i filtri che non possono funzionare ----------------------------
 
 def test_distanza_senza_punto_di_riferimento_e_un_avviso():
