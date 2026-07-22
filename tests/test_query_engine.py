@@ -5,7 +5,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from medici.query_engine import (  # noqa: E402
-    _sort, haversine_km, search, termini_servizio, Filtro)
+    _sort, avvisi, haversine_km, search, termini_servizio, Filtro)
 from medici.storage import Storage  # noqa: E402
 
 
@@ -32,6 +32,32 @@ def test_servizio_trova_le_varianti_del_nome(tmp_path):
     st.close()
     assert len(trovati) == 2, trovati
     assert "Ortesi in silicone" not in trovati
+
+
+# --- avvisi: i filtri che non possono funzionare ----------------------------
+
+def test_distanza_senza_punto_di_riferimento_e_un_avviso():
+    """Senza coordinate l'ordinamento per distanza non ordina niente, e senza
+    avviso sembra solo che il programma ignori la richiesta."""
+    detto = avvisi(Filtro(ordina="distanza"))
+    assert len(detto) == 1 and "lat,lng" in detto[0]
+    # Con il punto di riferimento non c'e' nulla da segnalare.
+    assert avvisi(Filtro(ordina="distanza", vicino_lat=45.4, vicino_lng=9.1)) == []
+
+
+def test_filtro_disponibilita_su_db_senza_slot_e_un_avviso(tmp_path):
+    """Chi non ha mai scaricato le disponibilità vedrebbe zero risultati e
+    darebbe la colpa agli altri filtri."""
+    st = _db(tmp_path, [("Visita", 50.0)])
+    detto = avvisi(Filtro(disponibile_entro_giorni=3), st)
+    st.close()
+    assert len(detto) == 1 and "disponibilità" in detto[0]
+
+
+def test_nessun_avviso_su_un_filtro_normale(tmp_path):
+    st = _db(tmp_path, [("Visita", 50.0)])
+    assert avvisi(Filtro(ordina="prezzo", prezzo_max=100), st) == []
+    st.close()
 
 
 def test_termini_servizio_scarta_le_preposizioni():

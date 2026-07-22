@@ -2,6 +2,13 @@
 # quindi qui non c'e' metadata di pacchetto: solo la configurazione degli
 # strumenti, per non lasciarla implicita.
 
+[tool.pyright]
+# Le stesse impostazioni che usa Pylance nell'editor, scritte qui perche' un
+# controllo che passa solo sulla macchina di chi l'ha configurato non serve.
+# `basic`: i tipi dichiarati vanno rispettati, ma nessuno deve annotare tutto.
+typeCheckingMode = "basic"
+reportUnusedImport = "error"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # `.` perche' i test importano `medici` senza installarlo; `tests` perche'

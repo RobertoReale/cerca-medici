@@ -8,12 +8,25 @@ dati legittimi.
 """
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
+from medici.doctolib.client import ClientDoctolib
 from medici.sorgenti.doctolib import SorgenteDoctolib, riga_da_medico
 
 FIXTURE = Path(__file__).parent / "fixtures" / "doctolib_search.json"
+
+
+def _client_mai_usato() -> ClientDoctolib:
+    """`chiave_slot` non tocca il client: costruirne uno vero (con la sessione
+    HTTP che si porta dietro) servirebbe solo a soddisfare il costruttore.
+    Qualunque accesso qui dentro e' un bug, e infatti fallisce."""
+    class _Vietato:
+        def __getattr__(self, nome):
+            raise AssertionError(f"il client non doveva servire: .{nome}")
+
+    return cast(ClientDoctolib, _Vietato())
 
 
 @pytest.fixture(scope="module")
@@ -121,12 +134,13 @@ def test_senza_agenda_online_niente_calendario(per_nome):
     invece che a centinaia."""
     r = per_nome["Alimento"]
     assert r.ha_calendario is False
-    assert SorgenteDoctolib(client=object()).chiave_slot(r) is None
+    assert SorgenteDoctolib(client=_client_mai_usato()).chiave_slot(r) is None
 
 
 def test_chiave_slot_porta_motivo_e_agende(per_nome):
-    src = SorgenteDoctolib(client=object())
+    src = SorgenteDoctolib(client=_client_mai_usato())
     chiave = src.chiave_slot(per_nome["Giudici"])
+    assert chiave is not None
     motivo, agende = chiave.dati
     assert isinstance(motivo, int) and isinstance(agende, tuple) and agende
     # Frozen e hashable: lo scraper deduplica le chiavi con `dict.fromkeys`.

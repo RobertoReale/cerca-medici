@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from medici.storage import Storage
-from medici.query_engine import Filtro, search, stats
+from medici.query_engine import Filtro, avvisi, search, stats
 from medici.scraper import risolvi_sorgente, scrape_search
 from medici.sorgenti import elenco as sorgenti_disponibili, etichetta_di
 
@@ -60,6 +60,8 @@ def annullamento_richiesto() -> bool:
     try:
         from streamlit.runtime.scriptrunner import get_script_run_ctx
         ctx = get_script_run_ctx()
+        if ctx is None or ctx.script_requests is None:
+            return False        # fuori da uno ScriptRunner (import, test)
         return ctx.script_requests._state.name != "CONTINUE"
     except Exception:
         return False
@@ -156,7 +158,9 @@ elif submitted:
             # Il portale ha gia' spiegato perché non ha prodotto nulla (slug
             # inesistente, città non coperta): quel messaggio contiene i
             # suggerimenti, il generico «0 righe» no.
-            st.warning(f"{nome}: {rep.errore}")
+            st.warning(f"{nome}: {rep.errore}"
+                       + (f" {rep.righe} righe ({rep.nuove} nuove) sono "
+                          f"comunque nel database." if rep.righe else ""))
         elif rep.righe == 0:
             st.warning(f"{nome}: 0 righe. Città non riconosciuta o formato cambiato?")
         else:
@@ -175,7 +179,7 @@ gia_presenti = [] if _MANCANTI else storage.riepilogo_query()
 if gia_presenti:
     with st.sidebar.expander(f"Dati già nel database ({len(gia_presenti)} ricerche)"):
         st.dataframe(pd.DataFrame([dict(r) for r in gia_presenti]),
-                     hide_index=True, use_container_width=True)
+                     hide_index=True, width="stretch")
         st.caption("I filtri qui sotto interrogano questi dati: nessuna nuova "
                    "richiesta al sito.")
 
@@ -267,6 +271,12 @@ filtro = Filtro(
     vicino_lng=vlng,
 )
 
+# Un filtro che non puo' funzionare (ordinamento per distanza senza un punto di
+# riferimento, disponibilità mai raccolte) si manifesta come «nessun risultato»:
+# senza questo avviso l'utente sospetta gli altri filtri, che sono innocenti.
+for avviso in avvisi(filtro, storage):
+    st.warning(avviso)
+
 results = search(storage, filtro)
 s = stats(results)
 
@@ -296,7 +306,21 @@ preferite = [c for c in [
 altre = [c for c in df.columns if c not in preferite]
 df = df[preferite + altre]
 
-st.dataframe(df, use_container_width=True, hide_index=True,
+# Gli identificativi interni, le coordinate e i timestamp servono a far
+# funzionare il programma, non a scegliere un medico: in mezzo alle colonne
+# utili obbligano a scorrere di lato per arrivare al prezzo. Restano a un clic
+# di distanza perche' sono cio' che serve per verificare un dato sospetto.
+TECNICHE = ("id", "result_id", "address_id", "servizio_id", "lat", "lng",
+            "query_specializzazione", "query_citta", "data_scraping",
+            "prezzo_raw", "n_fonti")
+if not st.checkbox("Mostra le colonne tecniche (id, coordinate, data di "
+                   "scraping)", value=False):
+    df = df.drop(columns=[c for c in TECNICHE if c in df.columns])
+
+# `width="stretch"` e non `use_container_width=True`: quest'ultimo e' deprecato
+# da Streamlit 1.49 e la data di rimozione annunciata e' gia' passata — resta un
+# avviso a ogni render finche' regge, poi smette di funzionare.
+st.dataframe(df, width="stretch", hide_index=True,
              column_config={
                  "sorgente": st.column_config.TextColumn("Fonte"),
                  "disponibile_su": st.column_config.TextColumn(
@@ -306,6 +330,15 @@ st.dataframe(df, use_container_width=True, hide_index=True,
                           "che il medico non c'è."),
                  "url_profilo": st.column_config.LinkColumn("Profilo"),
                  "prezzo": st.column_config.NumberColumn("Prezzo €", format="%.0f"),
+                 "prezzo_e_da_min": st.column_config.CheckboxColumn(
+                     "«da»",
+                     help="Il prezzo è un minimo («da 30 €»), non una tariffa "
+                          "fissa: la visita può costare di più."),
+                 "prima_disponibilita": st.column_config.TextColumn(
+                     "1ª disponibilità"),
+                 "n_recensioni": st.column_config.NumberColumn("Recensioni"),
+                 "distanza_km": st.column_config.NumberColumn(
+                     "Distanza km", format="%.1f"),
                  "ha_calendario": st.column_config.CheckboxColumn(
                      "Prenot. online",
                      help="Senza spunta il profilo risulta «Inattivo»: "
@@ -319,6 +352,6 @@ st.download_button(
     mime="text/csv",
 )
 
-st.caption(f"{s['con_prezzo']} su {s['totale']} risultati hanno un prezzo pubblicato. "
+st.caption(f"Prezzo pubblicato: {s['con_prezzo']} risultati su {s['totale']}. "
            "I prezzi sono pubblicati solo da una minoranza dei medici (limite della "
            "piattaforma, non dello scraper).")

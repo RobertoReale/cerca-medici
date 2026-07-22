@@ -47,7 +47,7 @@ try:
 except Exception:  # pragma: no cover - tzdata assente (Windows senza `tzdata`)
     _ROME = None
 
-from .fetcher import Fetcher, FetchError, BASE_URL
+from .fetcher import Fetcher, FetcherGet, FetchError, BASE_URL
 
 log = logging.getLogger("medici.availability")
 
@@ -78,7 +78,11 @@ def build_slots_url(doctor_id: str, address_id: str, giorni: int = 5,
                     start: Optional[datetime] = None) -> str:
     if start is None:
         start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    end = (start + timedelta(days=giorni - 1)).replace(hour=23, minute=59, second=59)
+    # `giorni` arriva dall'utente (`--giorni`): con 0 o un negativo la finestra
+    # finirebbe PRIMA di iniziare e l'endpoint risponderebbe con niente, senza
+    # che nulla dica perche'. Un giorno e' il minimo che ha senso chiedere.
+    end = (start + timedelta(days=max(1, giorni) - 1)).replace(
+        hour=23, minute=59, second=59)
     params = (
         f"start={_iso(start)}&end={_iso(end)}"
         "&with%5B%5D=address.nearest_slot_after_end"
@@ -95,7 +99,7 @@ def build_slots_url(doctor_id: str, address_id: str, giorni: int = 5,
 class AvailabilityFetcher:
     """Recupera gli slot via HTTP diretto usando il Bearer token estratto dall'HTML."""
 
-    def __init__(self, access_token: str, fetcher: Optional[Fetcher] = None,
+    def __init__(self, access_token: str, fetcher: Optional[FetcherGet] = None,
                  rinnova_token: Optional[Callable[[], Optional[str]]] = None):
         """`rinnova_token`: callable che riscarica una pagina HTML e ne estrae un
         ACCESS_TOKEN fresco. Senza, un token scaduto a meta' run fa fallire con
@@ -190,7 +194,8 @@ class AvailabilityFetcher:
 
 
 def fetch_slots_for_rows(html_con_token: str, coppie_doctor_address, *,
-                         giorni: int = 5, fetcher: Optional[Fetcher] = None) -> List[dict]:
+                         giorni: int = 5,
+                         fetcher: Optional[FetcherGet] = None) -> List[dict]:
     """Helper: estrae il token dall'HTML e recupera gli slot per una lista di
     (doctor_id, address_id). Ritorna la lista piatta di tutti gli slot."""
     token = extract_access_token(html_con_token)

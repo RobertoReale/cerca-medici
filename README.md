@@ -133,13 +133,18 @@ Form con gli stessi filtri della CLI, selezione dei portali sia in scraping sia
 in consultazione, tabella con ordinamento nativo per colonna, export CSV. Gira
 solo in locale, nessun deployment.
 
+Gli identificativi interni, le coordinate e i timestamp restano nascosti dietro
+«Mostra le colonne tecniche»: servono a verificare un dato sospetto, non a
+scegliere un medico, e in mezzo alle altre colonne obbligavano a scorrere di
+lato per arrivare al prezzo.
+
 ---
 
 ## Architettura
 
 ```
 medici/
-  testo.py            slugify condiviso (accenti, separatori)
+  testo.py            slugify condiviso (accenti, separatori) + console UTF-8
   fetcher.py          requests + rate limiting 1-3s, retry/backoff, get() e post(), rilevamento blocco
   scraper.py          Paginazione, retry, annullamento, sostituzione dei dati vecchi — non sa di che sito parla
   storage.py          SQLite (tabelle risultati + disponibilita) + export CSV + migrazioni
@@ -244,8 +249,7 @@ ricostruiti. Nessuna azione manuale.
 
 Il file di default è `data/medici.db`. Se esiste solo il vecchio
 `data/miodottore.db`, viene usato quello: il rinomino del progetto non fa
-sparire i dati già raccolti. I comandi per allineare anche i nomi dei file sono
-in [§0.2 del piano](piano-implementazione-doctolib.md#02-rinomino-del-progetto--due-passi-manuali-rimasti).
+sparire i dati già raccolti.
 
 ---
 
@@ -296,6 +300,13 @@ in [§0.2 del piano](piano-implementazione-doctolib.md#02-rinomino-del-progetto-
   *veri* di Milano — dati plausibili e sbagliati. Lo scraper riconosce il
   redirect e **si rifiuta di salvare**, dicendo quale dei due termini non è stato
   capito.
+- **Un guasto di rete è un esito, non un traceback**: se una pagina non arriva
+  nemmeno dopo i retry, il portale riporta l'errore e gli altri proseguono. La
+  sostituzione dei dati vecchi viene saltata, perché le pagine mancanti non
+  provano che quei medici siano spariti dal sito.
+- **Filtri che non possono funzionare**: ordinare per distanza senza un punto di
+  riferimento, o filtrare per disponibilità senza averle mai raccolte, produce
+  un avviso — non un elenco vuoto da interpretare (`query_engine.avvisi`).
 
 ---
 
@@ -345,3 +356,6 @@ funzionare senza che nessuno se ne accorga.
 | `test_doctolib_slug.py` | la traduzione delle specializzazioni e i messaggi d'errore che propongono alternative |
 | `test_unifica.py` | il clustering cross-portale, soprattutto i casi in cui **non** deve unire |
 | `test_fetcher.py` | encoding, brotli, retry, e il `post()` che le API JSON richiedono |
+| `test_scraper.py` | paginazione (una pagina vuota transitoria non tronca la raccolta), annullamento, e i guasti di rete che non devono cancellare i dati precedenti |
+| `test_availability.py` | slot MioDottore: 4xx tollerati, token rinnovato dopo un 401, offset orario stagionale |
+| `test_storage.py` | deduplica delle righe che la paginazione ripete, e l'uso da più thread (la GUI interroga il DB mentre lo scraping ci scrive) |

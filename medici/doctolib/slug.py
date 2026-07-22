@@ -45,11 +45,12 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence
 
 from ..fetcher import FetchError
 from ..testo import slugify
-from .client import BASE_URL, ClientDoctolib, ContestoDoctolib, LandingNonTrovata
+from .client import (BASE_URL, ClientDoctolib, ClientLanding, ContestoDoctolib,
+                     LandingNonTrovata)
 
 log = logging.getLogger("medici.doctolib.slug")
 
@@ -158,7 +159,7 @@ def candidati(voluto: str, noti: Sequence[str]) -> List[str]:
 # --- risoluzione ------------------------------------------------------------
 
 def risolvi(specializzazione: str, citta: str, *,
-            client: Optional[ClientDoctolib] = None,
+            client: Optional[ClientLanding] = None,
             noti: Optional[Sequence[str]] = None) -> ContestoDoctolib:
     """Contesto pronto per l'API, oppure `SlugNonRisolto` con le alternative.
 

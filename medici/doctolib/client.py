@@ -35,11 +35,11 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import List, Optional, Sequence, Tuple
+from datetime import datetime
+from typing import List, Optional, Protocol, Sequence, Tuple
 from urllib.parse import urlparse
 
-from ..fetcher import Fetcher, FetchError
+from ..fetcher import Fetcher, FetcherHTTP, FetchError
 
 log = logging.getLogger("medici.doctolib.client")
 
@@ -193,12 +193,25 @@ def _totale_da_content_range(valore: Optional[str]) -> Tuple[Optional[int], Opti
         return None, None
 
 
+class ClientLanding(Protocol):
+    """Quel poco di client che serve a `slug.risolvi`: la sola landing.
+
+    La risoluzione degli slug e' la parte con piu' rami (redirect, alternative,
+    sonda) ed e' testata con un client finto: dichiarare qui che le basta un
+    metodo e' cio' che rende quel finto un'implementazione legittima e non un
+    trucco da type checker.
+    """
+
+    def contesto_ricerca(self, spec_slug: str, city_slug: str,
+                         /) -> "ContestoDoctolib": ...
+
+
 class ClientDoctolib:
     """Chiamate HTTP a Doctolib. Una istanza per run: riusa la sessione."""
 
-    def __init__(self, fetcher: Optional[Fetcher] = None):
+    def __init__(self, fetcher: Optional[FetcherHTTP] = None):
         # `rileva_blocco` nostro: quello di default e' tarato su MioDottore.
-        self.fetcher = fetcher or Fetcher(rileva_blocco=rileva_blocco)
+        self.fetcher: FetcherHTTP = fetcher or Fetcher(rileva_blocco=rileva_blocco)
 
     # -- passo 1: landing ----------------------------------------------------
     def contesto_ricerca(self, spec_slug: str, city_slug: str) -> ContestoDoctolib:
@@ -346,12 +359,8 @@ class ClientDoctolib:
 def _stampa_prova(spec_slug: str, city_slug: str) -> int:
     """`python -m medici.doctolib.client cardiologo milano` — criterio di uscita
     della fase 1: verifica a occhio che i tre passi funzionino davvero."""
-    import sys
-    for stream in (sys.stdout, sys.stderr):   # console Windows: € e accenti
-        try:
-            stream.reconfigure(encoding="utf-8")
-        except (AttributeError, ValueError):
-            pass
+    from ..testo import console_utf8
+    console_utf8()                            # console Windows: € e accenti
     logging.basicConfig(level=logging.INFO,
                         format="%(levelname)s %(name)s: %(message)s")
     client = ClientDoctolib()

@@ -276,7 +276,9 @@ def extract_specializations_seen(html) -> dict:
     """Mappa {slug_specializzazione: nome} osservata nelle card (per URL building)."""
     seen = {}
     for card in make_soup(html).select('[data-id="result-item"]'):
+        # BeautifulSoup puo' restituire una lista per gli attributi multivalore:
+        # solo una stringa e' un nome di specializzazione.
         name = card.get("data-eec-specialization-name")
-        if name:
+        if isinstance(name, str) and name:
             seen[slugify(name)] = name
     return seen

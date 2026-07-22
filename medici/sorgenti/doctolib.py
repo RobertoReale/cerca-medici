@@ -24,9 +24,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from ..doctolib.client import BASE_URL, PER_PAGINA, ClientDoctolib, ContestoDoctolib
+from ..doctolib.client import BASE_URL, ClientDoctolib, ContestoDoctolib
 from ..doctolib.slug import SlugNonRisolto, risolvi
-from ..fetcher import Fetcher
+from ..fetcher import FetcherHTTP
 from ..parser import Riga
 from . import (ChiaveSlot, Pagina, RaccoglitoreSlot, RicercaNonValida, Sorgente,
                registra)
@@ -90,7 +90,9 @@ def riga_da_medico(m: dict) -> Riga:
         result_id=_str(rif.get("id")),
         address_id=_str(rif.get("practiceId")),
         nome=nome,
-        tipo=_TIPI.get(m.get("type")),
+        # `or ""`: `type` puo' mancare, e cercare `None` in una mappa di stringhe
+        # darebbe la risposta giusta (None) per il motivo sbagliato.
+        tipo=_TIPI.get(m.get("type") or ""),
         specializzazione=(m.get("speciality") or {}).get("name"),
         citta=loc.get("city"),
         indirizzo=loc.get("address"),
@@ -146,7 +148,7 @@ class SorgenteDoctolib(Sorgente):
     etichetta = ETICHETTA
     supporta_disponibilita = True
 
-    def __init__(self, fetcher: Optional[Fetcher] = None,
+    def __init__(self, fetcher: Optional[FetcherHTTP] = None,
                  client: Optional[ClientDoctolib] = None):
         # `client` iniettabile: i test lo sostituiscono con uno finto e non
         # toccano la rete. `fetcher` resta accettato perche' e' cosi' che

@@ -27,9 +27,10 @@ import sys
 from tabulate import tabulate
 
 from medici.storage import Storage
-from medici.query_engine import Filtro, search, stats
+from medici.query_engine import Filtro, avvisi, search, stats
 from medici.scraper import risolvi_sorgente, scrape_search
 from medici.sorgenti import elenco as sorgenti_disponibili, etichetta_di
+from medici.testo import console_utf8
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -114,6 +115,11 @@ def cmd_scrape(args) -> int:
             # specializzazione non esiste su quel portale, con i suggerimenti):
             # ripetere il generico "0 righe" nasconderebbe proprio la risposta.
             print(f"[{etichetta}] {rep.errore}", file=sys.stderr)
+            if rep.righe:
+                # Una raccolta fermata a meta' ha comunque salvato qualcosa:
+                # senza questa riga sembrerebbe che il run non abbia dato nulla.
+                print(f"[{etichetta}] {rep.righe} righe ({rep.nuove} nuove) da "
+                      f"{rep.pagine} pagine sono comunque nel database.")
         elif rep.righe == 0:
             print(f"[{etichetta}] ATTENZIONE: 0 righe estratte. Città non "
                   f"riconosciuta o formato cambiato? Controlla con --verbose.",
@@ -182,6 +188,10 @@ def cmd_cerca(args) -> int:
         if st.count_risultati() == 0:
             print("DB vuoto: esegui prima 'python cerca.py scrape ...'", file=sys.stderr)
             return 1
+        # Prima dei risultati: un filtro che non puo' funzionare va detto adesso,
+        # non lasciato dedurre da un elenco vuoto (vedi `query_engine.avvisi`).
+        for avviso in avvisi(f, st):
+            print(f"ATTENZIONE: {avviso}", file=sys.stderr)
         results = search(st, f)
 
     if not results:
@@ -211,16 +221,21 @@ def cmd_cerca(args) -> int:
         if args.ordina == "disponibilita" or args.disponibile_entro:
             row = {"1a disp.": r.get("prima_disponibilita") or "—", **row}
         if args.ordina == "distanza" and r.get("distanza_km") is not None:
-            row["Dist.km"] = f"{r['distanza_km']:.1f}"
+            # Con l'unita' dentro la cella: `tabulate` riconosce "8.0" come
+            # numero e lo ristampa come "8", buttando via il decimale — che a
+            # distanze urbane e' proprio la parte che distingue due studi.
+            row["Distanza"] = f"{r['distanza_km']:.1f} km"
         rows.append(row)
 
     print(tabulate(rows, headers="keys", tablefmt="simple_outline"))
-    print(f"\n{s['con_prezzo']} su {s['totale']} risultati hanno un prezzo pubblicato "
+    # Forma neutra: «1 su 1 risultati hanno» non si puo' leggere.
+    print(f"\nPrezzo pubblicato: {s['con_prezzo']} risultati su {s['totale']} "
           f"(ordinamento: {args.ordina}).")
     if args.unifica:
         uniti = sum(1 for r in results if (r.get("n_fonti") or 1) > 1)
-        print(f"{uniti} risultati sono lo stesso medico su più portali. "
-              f"Senza --unifica si vedono le righe grezze, una per fonte.")
+        print(f"{uniti} " + ("risultato è" if uniti == 1 else "risultati sono")
+              + " lo stesso medico su più portali. Senza --unifica si vedono "
+                "le righe grezze, una per fonte.")
 
     if args.export:
         # Un solo punto di verita' per il CSV (BOM incluso, per Excel):
@@ -228,6 +243,16 @@ def cmd_cerca(args) -> int:
         n = Storage.export_rows_csv(results, args.export)
         print(f"Esportato: {args.export} ({n} righe)")
     return 0
+
+
+def _positivo(val: str) -> int:
+    """Intero >= 1. Con 0 o un negativo `--max-pagine` non scaricherebbe nulla e
+    `--giorni` chiederebbe una finestra che finisce prima di iniziare: entrambi
+    esiti silenziosi, indistinguibili da «il sito non ha risposto»."""
+    n = int(val)
+    if n < 1:
+        raise argparse.ArgumentTypeError(f"deve essere almeno 1, non {n}")
+    return n
 
 
 def _aggiungi_fonte(parser, aiuto: str) -> None:
@@ -256,10 +281,11 @@ def build_parser() -> argparse.ArgumentParser:
     sc.add_argument("--specializzazione", required=True)
     sc.add_argument("--citta", required=True)
     _aggiungi_fonte(sc, "Portali da interrogare.")
-    sc.add_argument("--max-pagine", type=int, default=40)
+    sc.add_argument("--max-pagine", type=_positivo, default=40)
     sc.add_argument("--disponibilita", action="store_true",
                     help="Raccogli anche gli slot orari (endpoint /api/v3 — vedi README)")
-    sc.add_argument("--giorni", type=int, default=5, help="Giorni di disponibilità da raccogliere")
+    sc.add_argument("--giorni", type=_positivo, default=5,
+                    help="Giorni di disponibilità da raccogliere")
     sc.set_defaults(func=cmd_scrape)
 
     ce = sub.add_parser("cerca", help="Interroga il DB locale")
@@ -300,11 +326,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     # Console Windows: forza UTF-8 per €, accenti e caratteri di tabella.
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8")
-        except (AttributeError, ValueError):
-            pass
+    console_utf8()
     parser = build_parser()
     args = parser.parse_args(argv)
     _setup_logging(getattr(args, "verbose", False))

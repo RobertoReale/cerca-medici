@@ -201,8 +201,7 @@ def _fondi(gruppo: Sequence[dict], etichetta) -> dict:
     fuso = dict(ordinate[0])
     # Prima disponibilita': qui il minimo ha senso e non inventa nulla — e' la
     # data piu' vicina in cui quel medico e' prenotabile *da qualche parte*.
-    prime = [r.get("prima_disponibilita") for r in gruppo
-             if r.get("prima_disponibilita")]
+    prime = [d for d in (r.get("prima_disponibilita") for r in gruppo) if d]
     if prime:
         fuso["prima_disponibilita"] = min(prime)
     fuso["n_fonti"] = len({r.get("sorgente") for r in gruppo})

@@ -1,6 +1,7 @@
 """Regressioni sul Fetcher: encoding, brotli, retry."""
 import importlib.util
 import time
+from typing import Optional
 
 import pytest
 import requests
@@ -9,7 +10,7 @@ from medici.fetcher import ACCEPT_ENCODING, RETRY_STATUS, Fetcher, FetchError
 
 
 def _resp(body: bytes, content_type: str, status: int = 200,
-          headers: dict = None) -> requests.Response:
+          headers: Optional[dict] = None) -> requests.Response:
     r = requests.Response()
     r.status_code = status
     r._content = body

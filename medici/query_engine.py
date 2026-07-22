@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import math
 import re
-import sqlite3
 from dataclasses import dataclass
 from typing import List, Optional, Sequence
 
@@ -59,6 +58,31 @@ class Filtro:
     # per ordinamento distanza:
     vicino_lat: Optional[float] = None
     vicino_lng: Optional[float] = None
+
+
+def avvisi(f: Filtro, storage: Optional[Storage] = None) -> List[str]:
+    """Cosa, in questo filtro, non puo' funzionare — spiegato all'utente.
+
+    Sono i casi che senza avviso si manifestano come «nessun risultato» o come
+    un ordinamento apparentemente casuale: la query e' corretta, e' un dato o un
+    parametro a mancare. La regola sta qui e non nelle due interfacce perche' e'
+    una sola, e perche' e' proprio il genere di controllo che, duplicato, viene
+    aggiornato da una parte e non dall'altra.
+    """
+    fuori: List[str] = []
+    if f.ordina == "distanza" and (f.vicino_lat is None or f.vicino_lng is None):
+        fuori.append(
+            "Ordinamento per distanza senza un punto di riferimento: indica "
+            "«vicino a» nella forma lat,lng (es. 45.4642,9.1900). Senza, "
+            "l'ordine resta quello di partenza e la colonna distanza è vuota.")
+    if storage is not None and (f.disponibile_entro_giorni is not None
+                                or f.ordina == "disponibilita"):
+        if storage.count_disponibilita() == 0:
+            fuori.append(
+                "Nel database non c'è nessuna disponibilità: va raccolta "
+                "durante lo scraping (opzione «disponibilità»). Finché manca, "
+                "filtrare o ordinare per disponibilità non trova nulla.")
+    return fuori
 
 
 def haversine_km(lat1, lng1, lat2, lng2) -> Optional[float]:
@@ -127,11 +151,10 @@ def _build_where(f: Filtro) -> tuple[str, list]:
     if f.min_rating:
         clauses.append("COALESCE(rating,0) >= ?")
         params.append(f.min_rating)
-    if f.solo_con_prezzo or f.ordina == "prezzo":
-        # Quando ordino per prezzo, i NULL non hanno senso in testa; li escludo
-        # solo se richiesto esplicitamente, altrimenti li mando in coda (vedi sort).
-        if f.solo_con_prezzo:
-            clauses.append("prezzo IS NOT NULL")
+    if f.solo_con_prezzo:
+        # Ordinando per prezzo i NULL non spariscono: vanno in coda (vedi
+        # `_ORDER_SQL` e `_sort`). Si escludono solo se richiesto qui.
+        clauses.append("prezzo IS NOT NULL")
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     return where, params
 
@@ -246,11 +269,12 @@ def _sort(results: List[dict], f: Filtro) -> List[dict]:
         # NULL sempre in coda (chiave 1 = manca il prezzo), poi per valore.
         # Con discendente=True invertiamo solo il segno del valore, non i NULL.
         sign = -1 if reverse else 1
-        return sorted(
-            results,
-            key=lambda r: (r.get("prezzo") is None,
-                           sign * (r.get("prezzo") if r.get("prezzo") is not None else 0)),
-        )
+
+        def chiave_prezzo(r: dict) -> tuple:
+            p = r.get("prezzo")
+            return (p is None, sign * float(p or 0.0))
+
+        return sorted(results, key=chiave_prezzo)
     if f.ordina == "rating":
         return sorted(results, key=lambda r: (r.get("rating") or 0), reverse=not reverse)
     if f.ordina == "recensioni":

@@ -14,7 +14,7 @@ import logging
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Callable, Optional, Protocol
 
 import requests
 
@@ -108,6 +108,37 @@ class FetchResult:
         except ValueError as e:
             raise FetchError(f"risposta non JSON da {self.url}: {e}",
                              self.status) from None
+
+
+# --- cosa serve davvero, a chi riceve un fetcher ----------------------------
+# I moduli che ricevono un fetcher iniettato non usano la classe `Fetcher`: ne
+# usano UNO o DUE metodi. Dichiararlo con dei Protocol dice esattamente quali,
+# e rende legittimi (anche per il type checker) i fetcher finti dei test, che
+# esistono proprio per non toccare la rete.
+#
+# I parametri sono posizionali-solo: chi implementa il protocollo e' libero di
+# chiamarli come vuole (`spec` invece di `specializzazione`), ed e' cio' che
+# rende il contratto sul comportamento e non sui nomi.
+
+class FetcherGet(Protocol):
+    """Il minimo: una GET. Basta a chi interroga un endpoint gia' noto."""
+
+    def get(self, url: str, /, *, expect_cards: bool = ...,
+            headers: Optional[dict] = ...) -> "FetchResult": ...
+
+
+class FetcherHTTP(FetcherGet, Protocol):
+    """GET + POST: le API di ricerca JSON vogliono un POST."""
+
+    def post(self, url: str, /, *, json: Optional[dict] = ...,
+             headers: Optional[dict] = ...) -> "FetchResult": ...
+
+
+class FetcherRicerca(FetcherGet, Protocol):
+    """GET + la pagina di ricerca di MioDottore, con l'URL costruito dentro."""
+
+    def get_search_page(self, specializzazione: str, citta: str,
+                        page: int = ..., /) -> "FetchResult": ...
 
 
 class Fetcher:

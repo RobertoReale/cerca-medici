@@ -3,7 +3,8 @@ from datetime import datetime
 
 import pytest
 
-from medici.availability import AvailabilityFetcher, _iso, extract_access_token
+from medici.availability import (AvailabilityFetcher, _iso, build_slots_url,
+                                 extract_access_token)
 from medici.fetcher import FetchError, FetchResult
 
 
@@ -13,7 +14,7 @@ class FetcherFinto:
     `esiti` permette di programmare una sequenza (es. prima un 401, poi un 200)
     per verificare il rinnovo del token."""
 
-    def __init__(self, risposta=None, errore=None, esiti=None):
+    def __init__(self, risposta: str = "", errore=None, esiti=None):
         self.risposta, self.errore = risposta, errore
         self.esiti = list(esiti or [])
         self.chiamate = []
@@ -88,6 +89,15 @@ def test_rinnovo_fallito_non_propaga():
     af = AvailabilityFetcher("tok", fetcher=f,
                              rinnova_token=lambda: (_ for _ in ()).throw(RuntimeError("giù")))
     assert af.fetch_slots("1", "2") == []
+
+
+def test_finestra_di_zero_giorni_non_finisce_prima_di_iniziare():
+    """`--giorni 0` chiedeva una finestra a rovescio: nessuno slot e nessuna
+    spiegazione. Il minimo sensato e' un giorno."""
+    url = build_slots_url("1", "2", giorni=0,
+                          start=datetime(2026, 7, 22, 0, 0, 0))
+    assert "start=2026-07-22T00:00:00" in url
+    assert "end=2026-07-22T23:59:59" in url
 
 
 def test_estrazione_token():

@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Any, Callable, List, Optional
 
 from ..availability import AvailabilityFetcher, extract_access_token
-from ..fetcher import Fetcher, build_search_url
+from ..fetcher import Fetcher, FetcherRicerca, build_search_url
 from ..parser import Riga, count_cards, make_soup, parse_search_html
 from . import ChiaveSlot, Pagina, RaccoglitoreSlot, Sorgente, registra
 
@@ -35,10 +35,11 @@ class SorgenteMioDottore(Sorgente):
     etichetta = ETICHETTA
     supporta_disponibilita = True
 
-    def __init__(self, fetcher: Optional[Fetcher] = None):
-        # `fetcher` puo' essere un oggetto qualsiasi con `get_search_page`: i
-        # test ne iniettano uno finto per verificare la paginazione senza rete.
-        self.fetcher = fetcher or Fetcher()
+    def __init__(self, fetcher: Optional[FetcherRicerca] = None):
+        # `fetcher` e' un qualsiasi `FetcherRicerca` (vedi il protocollo in
+        # `medici/fetcher.py`): i test ne iniettano uno finto per verificare la
+        # paginazione senza rete.
+        self.fetcher: FetcherRicerca = fetcher or Fetcher()
 
     def url_ricerca(self, specializzazione: str, citta: str) -> str:
         return build_search_url(specializzazione, citta)

@@ -16,7 +16,7 @@ from medici.storage import Storage
 
 
 def _riga(rid="1", aid="2", nome="Dr. X", prezzo=50.0, calendario=True, **kw):
-    base = dict(result_id=rid, address_id=aid, nome=nome, tipo="doctor",
+    base: dict = dict(result_id=rid, address_id=aid, nome=nome, tipo="doctor",
                 specializzazione="podologo", citta="Milano", indirizzo="Via A 1",
                 provincia="MI", servizio="Visita", servizio_id="9", prezzo=prezzo,
                 prezzo_e_da_min=False, prezzo_raw=f"{prezzo} €", rating=4.5,
@@ -49,7 +49,9 @@ class SorgenteFinta(Sorgente):
         return Pagina(righe=[], n_schede=0, contesto="ctx")
 
     def chiave_slot(self, riga):
-        if not riga.ha_calendario:
+        # Stessa condizione delle sorgenti vere: senza calendario, o senza gli
+        # id con cui si identifica un'agenda, non c'e' niente da chiedere.
+        if not riga.ha_calendario or not (riga.result_id and riga.address_id):
             return None
         return ChiaveSlot(riga.result_id, riga.address_id,
                           dati=tuple(sorted(riga.extra.items())))

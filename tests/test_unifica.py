@@ -4,6 +4,8 @@ I casi che contano sono quelli in cui il clustering **sbaglia**: fondere due
 medici diversi e' peggio che non fondere nulla, perche' fa sparire una riga vera
 e attribuisce a qualcuno il prezzo di qualcun altro.
 """
+from typing import Optional
+
 import pytest
 
 from medici.query_engine import Filtro, search
@@ -14,7 +16,8 @@ from medici.unifica import SOGLIA_METRI, chiave_nome, raggruppa, unifica
 _GRADO_M = 111_320.0
 
 
-def _riga(nome, sorgente="miodottore", *, lat=45.4642, lng=9.19, prezzo=100.0,
+def _riga(nome, sorgente="miodottore", *, lat: Optional[float] = 45.4642,
+          lng: Optional[float] = 9.19, prezzo: Optional[float] = 100.0,
           tipo="doctor", **kw):
     base = dict(nome=nome, sorgente=sorgente, lat=lat, lng=lng, prezzo=prezzo,
                 tipo=tipo, prezzo_e_da_min=False, n_recensioni=0,

@@ -1,6 +1,6 @@
 """Regressioni sulla paginazione: una pagina vuota transitoria non deve
 troncare silenziosamente la raccolta."""
-from medici.fetcher import FetchResult
+from medici.fetcher import FetchError, FetchResult
 from medici.scraper import scrape_search
 from medici.storage import Storage
 
@@ -25,7 +25,16 @@ class FetcherAPagine:
     def get_search_page(self, spec, citta, page=1):
         self.chiamate.append(page)
         html = self.pagine.pop(0) if self.pagine else _pagina(0)
+        # Un elemento della lista puo' essere un'eccezione: e' cosi' che si
+        # programma un guasto di rete a una pagina precisa.
+        if isinstance(html, Exception):
+            raise html
         return FetchResult(url=f"http://x?page={page}", status=200, html=html)
+
+    def get(self, url, **kw):
+        # Fa parte del protocollo `FetcherRicerca` (serve alle disponibilita'),
+        # ma questi test non le chiedono: se qualcuno ci arriva, e' un bug.
+        raise AssertionError(f"richiesta HTTP inattesa: {url}")
 
 
 def test_pagina_vuota_transitoria_non_ferma_la_paginazione(tmp_path):
@@ -142,6 +151,41 @@ def test_altre_ricerche_non_vengono_toccate(tmp_path):
     n = st.count_risultati()
     st.close()
     assert n == 4, "la pulizia ha invaso un'altra ricerca"
+
+
+# --- guasti di rete ---------------------------------------------------------
+
+def test_rete_giu_e_un_esito_non_un_traceback(tmp_path):
+    """Un `FetchError` che sfugge farebbe morire la CLI a metà pagina e, con
+    più portali, impedirebbe anche a quelli sani di partire."""
+    f = FetcherAPagine([FetchError("connessione rifiutata")])
+    st = Storage(tmp_path / "t.db")
+    rep = scrape_search("podologo", "Milano", fetcher=f, storage=st, max_pagine=10)
+    st.close()
+    assert rep.righe == 0 and rep.pagine == 0
+    assert rep.errore and "pagina 1" in rep.errore
+    assert rep.bloccato is False
+
+
+def test_guasto_a_meta_corsa_non_cancella_i_dati_precedenti(tmp_path):
+    """`visti` contiene solo le pagine arrivate: usarlo per la pulizia finale
+    cancellerebbe medici veri, ancora online, raccolti da un run completo."""
+    db = tmp_path / "t.db"
+    st = Storage(db)
+    scrape_search("podologo", "Milano", storage=st, max_pagine=10,
+                  fetcher=FetcherAPagine([_pagina(3, 0), _pagina(0), _pagina(0)]))
+    assert st.count_risultati() == 3
+
+    # Secondo giro: pagina 1 buona (un solo medico), poi la rete cade.
+    rep = scrape_search(
+        "podologo", "Milano", storage=st, max_pagine=10,
+        fetcher=FetcherAPagine([_pagina(1, 0), _pagina(0),
+                                FetchError("timeout")]))
+    n = st.count_risultati()
+    st.close()
+    assert rep.errore, "un run incompleto non può essere riportato come riuscito"
+    assert rep.righe == 1
+    assert n == 3, "i medici degli altri run sono stati cancellati"
 
 
 def test_export_csv_accetta_dict(tmp_path):

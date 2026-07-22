@@ -189,6 +189,8 @@ def ottieni(nome: str, **kwargs) -> Sorgente:
 
 
 # Gli import in fondo evitano il ciclo: i moduli delle sorgenti importano da qui.
-# L'ORDINE conta: `elenco()[0]` e' la sorgente di default della CLI.
-from . import miodottore as _miodottore  # noqa: E402,F401  (registra la sorgente)
-from . import doctolib as _doctolib      # noqa: E402,F401  (registra la sorgente)
+# Non si usa il nome importato: serve l'effetto collaterale, cioe' la `registra`
+# in fondo a ciascun modulo. L'ORDINE conta: `elenco()[0]` e' la sorgente di
+# default della CLI.
+from . import miodottore  # noqa: E402,F401  # pyright: ignore[reportUnusedImport]
+from . import doctolib    # noqa: E402,F401  # pyright: ignore[reportUnusedImport]

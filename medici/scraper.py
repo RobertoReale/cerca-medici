@@ -15,7 +15,7 @@ import logging
 from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Union
 
-from .fetcher import Fetcher, BlockedError
+from .fetcher import BlockedError, FetchError, FetcherGet
 from .sorgenti import (ChiaveSlot, RaccoglitoreSlot, RicercaNonValida, Sorgente,
                        elenco, ottieni)
 from .storage import Storage
@@ -56,7 +56,7 @@ class RunReport:
 
 
 def risolvi_sorgente(sorgente: SorgenteArg = None,
-                     fetcher: Optional[Fetcher] = None) -> Sorgente:
+                     fetcher: Optional[FetcherGet] = None) -> Sorgente:
     """Normalizza l'argomento `sorgente` in un'istanza di `Sorgente`.
 
     Accetta anche None + `fetcher`: e' la forma storica delle chiamate
@@ -76,7 +76,7 @@ def scrape_search(
     citta: str,
     *,
     sorgente: SorgenteArg = None,
-    fetcher: Optional[Fetcher] = None,
+    fetcher: Optional[FetcherGet] = None,
     storage: Optional[Storage] = None,
     max_pagine: int = 40,
     sostituisci: bool = True,
@@ -115,6 +115,11 @@ def scrape_search(
         pagina = 0
         chiavi_slot: list[ChiaveSlot] = []
         contesto = None
+        # Valorizzato quando la paginazione si chiude per un guasto e non
+        # perche' i risultati sono finiti: in quel caso `visti` NON e' l'elenco
+        # completo di chi e' ancora online, e usarlo per la pulizia finale
+        # cancellerebbe medici veri raccolti da un run precedente.
+        incompleto: Optional[str] = None
         for page in range(1, max_pagine + 1):
             if stop():
                 log.info("Annullato dall'utente alla pagina %d.", page)
@@ -138,6 +143,17 @@ def scrape_search(
                 avvisa(f"{src.etichetta}: {e}", None)
                 return report(pagine=pagina, righe=tot_righe, nuove=nuove,
                               errore=str(e))
+            except FetchError as e:
+                # Rete giu', DNS, 404, o un 5xx che ha esaurito i retry del
+                # Fetcher. Prima usciva come traceback: la CLI moriva a meta'
+                # pagina e — con piu' portali — quelli non ancora interrogati
+                # non partivano nemmeno. Le righe gia' salvate restano (il
+                # commit e' per pagina), quindi c'e' un esito da riportare.
+                log.error("[%s] richiesta fallita a pagina %d: %s",
+                          src.etichetta, page, e)
+                return report(pagine=pagina, righe=tot_righe, nuove=nuove,
+                              errore=f"pagina {page} non scaricata ({e}). "
+                                     f"Rete assente o sito irraggiungibile?")
 
             if pag.n_schede == 0:
                 # Una pagina vuota puo' essere un singhiozzo del sito, non la
@@ -153,6 +169,15 @@ def scrape_search(
                     log.error("BLOCCO rilevato: %s", e)
                     return report(pagine=pagina, righe=tot_righe, nuove=nuove,
                                   bloccato=True, errore=str(e))
+                except FetchError as e:
+                    # Il singhiozzo non era transitorio. Chiudiamo con quello
+                    # che abbiamo (e le disponibilita' si raccolgono lo stesso),
+                    # ma senza dichiarare completa una paginazione che non lo e'.
+                    log.error("Riprova di pagina %d fallita: %s", page, e)
+                    incompleto = (f"pagina {page} non scaricata ({e}): la "
+                                  f"raccolta si ferma qui e i medici trovati "
+                                  f"nei run precedenti NON vengono rimossi.")
+                    break
 
             if pag.n_schede == 0:
                 if page == 1:
@@ -217,7 +242,7 @@ def scrape_search(
         # chi non compare piu' tra i risultati del sito esce dal DB.
         # `pagina > 0` e non `tot_righe > 0`: un run che ritrova esattamente gli
         # stessi medici e' riuscito lo stesso, semplicemente non ha novita'.
-        if sostituisci and pagina > 0 and not interrotto:
+        if sostituisci and pagina > 0 and not interrotto and not incompleto:
             rimosse = storage.clear_query_tranne(specializzazione, citta, visti,
                                                  sorgente=src.nome)
             if rimosse:
@@ -225,7 +250,7 @@ def scrape_search(
                          rimosse, specializzazione, citta, src.nome)
 
         return report(pagine=pagina, righe=tot_righe, slot=tot_slot,
-                      nuove=nuove, annullato=interrotto)
+                      nuove=nuove, annullato=interrotto, errore=incompleto)
     finally:
         if own_storage:
             storage.close()

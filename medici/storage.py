@@ -384,6 +384,15 @@ class Storage:
         with self._lock:
             return self.conn.execute("SELECT COUNT(*) FROM risultati").fetchone()[0]
 
+    def count_disponibilita(self) -> int:
+        """Quanti slot orari ci sono. Zero significa che nessuno scraping e'
+        mai stato fatto con l'opzione «disponibilita»: e' l'unica spiegazione
+        di un filtro per disponibilita' che non trova niente (vedi
+        `query_engine.avvisi`)."""
+        with self._lock:
+            return self.conn.execute(
+                "SELECT COUNT(*) FROM disponibilita").fetchone()[0]
+
     # -- export --------------------------------------------------------------
     @staticmethod
     def export_rows_csv(rows: Sequence, path: Path) -> int:
