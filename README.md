@@ -301,7 +301,9 @@ sparire i dati già raccolti.
 - **Rate limiting adattivo**: pausa randomizzata tra le richieste, retry con
   backoff su 429/5xx. Il ritardo di base non è fisso: si allarga quando il
   sito risponde 429/5xx/timeout e si restringe quando torna a rispondere
-  pulito, restando comunque tra `min_delay` e un tetto (3× `max_delay`). Se un
+  pulito, ma non scende mai sotto la finestra configurata (1–3 s di default):
+  si muove tra `max_delay` e un tetto di 3× `max_delay`, così a regime la pausa
+  resta randomizzata invece di stabilizzarsi su un intervallo fisso. Se un
   sito risponde con una challenge/captcha, lo scraper **si ferma** su quel
   portale invece di ritentare all'infinito.
 - **Doctolib non risponde 404 a una ricerca che non riconosce: redirige.** Una

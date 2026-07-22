@@ -189,7 +189,14 @@ class Fetcher:
         self._delay_base = min(self._delay_base * 1.5, self._delay_tetto)
 
     def _restringi_ritardo(self) -> None:
-        self._delay_base = max(self._delay_base * 0.9, self.min_delay)
+        # Il pavimento e' `max_delay`, non `min_delay`: restringere significa
+        # tornare alla finestra configurata, non andare piu' veloce di quanto
+        # si sia mai deciso di andare. Con `min_delay` come pavimento, dopo
+        # ~11 risposte pulite la finestra collassava a un punto solo e
+        # `uniform(min, min)` restituiva sempre lo stesso numero: niente piu'
+        # jitter, cioe' proprio la firma temporale che il rate limiting
+        # randomizzato esiste per non lasciare.
+        self._delay_base = max(self._delay_base * 0.9, self.max_delay)
 
     # -- blocco soft ---------------------------------------------------------
     @staticmethod
@@ -258,7 +265,6 @@ class Fetcher:
             if resp.status_code >= 400:
                 raise FetchError(f"HTTP {resp.status_code} su {url}", resp.status_code)
 
-            self._restringi_ritardo()
             html = self._decode(resp)
             if self.rileva_blocco(html):
                 raise BlockedError(
@@ -269,6 +275,11 @@ class Fetcher:
                 # 200 ma nessuna card dove ce ne aspettiamo: sospetto blocco soft.
                 log.info("0 card su %s (HTTP 200) — possibile fine pagine o blocco.", url)
 
+            # Solo qui la risposta e' davvero "pulita": un 200 che porta una
+            # challenge e' il segnale di stress piu' forte che esista, e
+            # restringere il ritardo prima di averlo escluso accelerava proprio
+            # mentre il sito stava chiudendo la porta.
+            self._restringi_ritardo()
             return FetchResult(url=url, status=resp.status_code, html=html,
                                url_finale=resp.url or url,
                                headers=dict(resp.headers))

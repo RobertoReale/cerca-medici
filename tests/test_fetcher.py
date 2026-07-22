@@ -129,7 +129,11 @@ def test_restringi_ritardo_su_risposta_pulita(monkeypatch):
     assert f._delay_base < 2.0
 
 
-def test_ritardo_di_base_resta_entro_min_e_tetto():
+def test_ritardo_di_base_resta_entro_max_e_tetto():
+    """Il ritardo si allarga fino al tetto e si restringe fino a `max_delay`,
+    non oltre: sotto `max_delay` la finestra `uniform(min, base)` si stringe
+    fino a collassare, e un run lungo finirebbe per mandare richieste a
+    intervallo costante — l'opposto del rate limiting randomizzato."""
     f = Fetcher(min_delay=0.5, max_delay=2.0)
     for _ in range(30):
         f._allarga_ritardo()
@@ -138,7 +142,22 @@ def test_ritardo_di_base_resta_entro_min_e_tetto():
     f._delay_base = f._delay_tetto
     for _ in range(50):
         f._restringi_ritardo()
-    assert f._delay_base == f.min_delay
+    assert f._delay_base == f.max_delay
+
+
+def test_a_regime_il_ritardo_resta_randomizzato(monkeypatch):
+    """Cento risposte pulite di fila non devono trasformare la pausa in un
+    valore fisso: e' la firma temporale piu' facile da riconoscere."""
+    f = Fetcher(min_delay=1.0, max_delay=3.0)
+    for _ in range(100):
+        f._restringi_ritardo()
+    attese = set()
+    monkeypatch.setattr(time, "sleep", attese.add)
+    f._last_request_ts = time.monotonic() - 1000  # nessuna attesa residua
+    for _ in range(20):
+        f._last_request_ts = time.monotonic()
+        f._respect_rate_limit()
+    assert len(attese) > 1, f"pausa fissa a regime: {attese}"
 
 
 def test_headers_della_risposta_disponibili(monkeypatch):
