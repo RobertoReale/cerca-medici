@@ -1,0 +1,11 @@
+# Il progetto non si installa (si esegue dalla sua cartella: `python cerca.py`),
+# quindi qui non c'e' metadata di pacchetto: solo la configurazione degli
+# strumenti, per non lasciarla implicita.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `.` perche' i test importano `medici` senza installarlo; `tests` perche'
+# `test_unifica` riusa la sorgente finta di `test_sorgenti`. Senza dichiararli,
+# funziona solo finche' pytest viene lanciato dalla cartella giusta.
+pythonpath = [".", "tests"]
+addopts = "-q"

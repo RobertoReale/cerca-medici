@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Dati locali e output
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+export_*.csv
+pagina_test.html
+*.debug.html
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

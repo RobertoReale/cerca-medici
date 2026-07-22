@@ -1,0 +1,425 @@
+{
+ "total": 611,
+ "healthcareProviders": [
+  {
+   "cloudinaryPublicId": "njdahh2hygsa9skgeyv1",
+   "id": "profile-1552580;practice-731539;cardiologo",
+   "languages": [
+    "it"
+   ],
+   "link": "/centro-medico/milano/movemed-milano?pid=practice-731539",
+   "location": {
+    "address": "Via Tolmezzo 15",
+    "city": "Milano",
+    "country": "it",
+    "lat": 45.4924432,
+    "lng": 9.235255100000002,
+    "zipcode": "20132",
+    "distanceInMeters": null
+   },
+   "name": "MoveMed Milano",
+   "references": {
+    "id": 1552580,
+    "type": "public_profile",
+    "practiceId": 731539
+   },
+   "services": [
+    "profile",
+    "onlineBooking"
+   ],
+   "administrativeArea": [],
+   "exactMatch": true,
+   "firstName": null,
+   "gender": null,
+   "matchedVisitMotive": {
+    "agendaIds": [
+     2383692
+    ],
+    "allowNewPatients": true,
+    "fee": {
+     "amount": 50.0,
+     "type": "UNIQUE"
+    },
+    "insuranceSector": {
+     "split": true,
+     "type": "PRIVATE"
+    },
+    "name": "Consulto per visione esami ",
+    "visitMotiveId": 14990995
+   },
+   "minimumFee": null,
+   "onlineBooking": {
+    "agendaIds": [
+     2383692,
+     2591722
+    ],
+    "telehealth": false,
+    "bookableOrganizationSpecialities": [
+     "2 cardiologi"
+    ]
+   },
+   "organizationStatus": {
+    "name": "Centro medico",
+    "slug": "centro-medico"
+   },
+   "paymentMeans": [
+    "cash",
+    "credit_card"
+   ],
+   "regulationSector": null,
+   "speciality": {
+    "name": "Cardiologo",
+    "slug": "cardiologo"
+   },
+   "title": null,
+   "type": "ORGANIZATION"
+  },
+  {
+   "cloudinaryPublicId": "rrxjw3qpdki755jenufe",
+   "id": "profile-878639;practice-346801;cardiologo",
+   "languages": [
+    "fr",
+    "gb"
+   ],
+   "link": "/internista/milano/sandra-liliana-giudici?pid=practice-346801",
+   "location": {
+    "address": "Via Brusuglio 72",
+    "city": "Milano",
+    "country": "it",
+    "lat": 45.5160424,
+    "lng": 9.173530399999999,
+    "zipcode": "20161",
+    "distanceInMeters": null
+   },
+   "name": "Giudici",
+   "references": {
+    "id": 878639,
+    "type": "public_profile",
+    "practiceId": 346801
+   },
+   "services": [
+    "profile",
+    "onlineBooking"
+   ],
+   "administrativeArea": [],
+   "exactMatch": true,
+   "firstName": "Sandra Liliana",
+   "gender": "male",
+   "matchedVisitMotive": {
+    "agendaIds": [
+     1013853
+    ],
+    "allowNewPatients": true,
+    "fee": {
+     "amount": 120.0,
+     "type": "UNIQUE"
+    },
+    "insuranceSector": {
+     "split": true,
+     "type": "PRIVATE"
+    },
+    "name": "Visita di controllo per medicina interna",
+    "visitMotiveId": 6887590
+   },
+   "minimumFee": null,
+   "onlineBooking": {
+    "agendaIds": [
+     1013853
+    ],
+    "telehealth": false,
+    "bookableOrganizationSpecialities": []
+   },
+   "organizationStatus": null,
+   "paymentMeans": [
+    "cash",
+    "check",
+    "satispay",
+    "credit_card",
+    "bank_transfer"
+   ],
+   "rating": {
+    "value": 5.0,
+    "totalUserReviews": 1
+   },
+   "regulationSector": null,
+   "speciality": {
+    "name": "Internista",
+    "slug": "internista"
+   },
+   "title": "Dott.",
+   "type": "INDIVIDUAL_PRACTITIONER"
+  },
+  {
+   "cloudinaryPublicId": "vzcwbczme4mjiypedcro",
+   "id": "profile-865409;practice-462650;cardiologo",
+   "languages": [],
+   "link": "/ospedale-privato-accreditato/milano/fondazione-don-gnocchi?pid=practice-462650",
+   "location": {
+    "address": "Via Alfonso Capecelatro 66",
+    "city": "Milano",
+    "country": "it",
+    "lat": 45.4733999,
+    "lng": 9.127221,
+    "zipcode": "20148",
+    "distanceInMeters": null
+   },
+   "name": "Fondazione Don Gnocchi",
+   "references": {
+    "id": 865409,
+    "type": "public_profile",
+    "practiceId": 462650
+   },
+   "services": [
+    "profile",
+    "onlineBooking"
+   ],
+   "administrativeArea": [],
+   "exactMatch": true,
+   "firstName": null,
+   "gender": null,
+   "matchedVisitMotive": {
+    "agendaIds": [
+     1356361,
+     1356363,
+     1356365,
+     1356366,
+     1356367,
+     1356368
+    ],
+    "allowNewPatients": true,
+    "fee": {
+     "amount": 110.0,
+     "type": "VARIES_DEPENDING_ON_HCP"
+    },
+    "insuranceSector": {
+     "split": true,
+     "type": "PRIVATE"
+    },
+    "name": "Ecocardiografia doppler",
+    "visitMotiveId": 16021522
+   },
+   "minimumFee": null,
+   "onlineBooking": {
+    "agendaIds": [
+     1356366,
+     1356361,
+     1356369,
+     1356396,
+     1356390,
+     1356365,
+     1356368,
+     1356387,
+     1356367,
+     1356405,
+     1356478,
+     1356406,
+     1356363
+    ],
+    "telehealth": false,
+    "bookableOrganizationSpecialities": []
+   },
+   "organizationStatus": {
+    "name": "Ospedale privato accreditato",
+    "slug": "ospedale-privato-accreditato"
+   },
+   "paymentMeans": [
+    "cash",
+    "check",
+    "credit_card"
+   ],
+   "regulationSector": null,
+   "speciality": {
+    "name": "Cardiologo",
+    "slug": "cardiologo"
+   },
+   "title": null,
+   "type": "ORGANIZATION"
+  },
+  {
+   "cloudinaryPublicId": "pu6pigodabgu7mvdc0ug",
+   "id": "profile-1177271;practice-544642;cardiologo",
+   "languages": [
+    "gb",
+    "it"
+   ],
+   "link": "/centro-medico/milano/milano-medica?pid=practice-544642",
+   "location": {
+    "address": "Via Filippo Turati 29",
+    "city": "Milano",
+    "country": "it",
+    "lat": 45.4772302,
+    "lng": 9.1953997,
+    "zipcode": "20121",
+    "distanceInMeters": null
+   },
+   "name": "MILANO MEDICA Centro Medico Polispecialistico a Milano",
+   "references": {
+    "id": 1177271,
+    "type": "public_profile",
+    "practiceId": 544642
+   },
+   "services": [
+    "profile",
+    "onlineBooking"
+   ],
+   "administrativeArea": [],
+   "exactMatch": true,
+   "firstName": null,
+   "gender": null,
+   "matchedVisitMotive": {
+    "agendaIds": [
+     1695692,
+     1745377,
+     1885006,
+     2178147,
+     2178153,
+     2253148
+    ],
+    "allowNewPatients": true,
+    "fee": null,
+    "insuranceSector": {
+     "split": true,
+     "type": "PRIVATE"
+    },
+    "name": "Prima visita cardiologica + ECG",
+    "visitMotiveId": 10829280
+   },
+   "minimumFee": null,
+   "onlineBooking": {
+    "agendaIds": [
+     2253148,
+     1885006,
+     2178147,
+     2178153,
+     1745377,
+     1695692
+    ],
+    "telehealth": false,
+    "bookableOrganizationSpecialities": [
+     "5 cardiologi",
+     "1 cardiochirurgo"
+    ]
+   },
+   "organizationStatus": {
+    "name": "Centro medico",
+    "slug": "centro-medico"
+   },
+   "paymentMeans": [
+    "cash",
+    "credit_card"
+   ],
+   "regulationSector": null,
+   "speciality": {
+    "name": "Cardiologo",
+    "slug": "cardiologo"
+   },
+   "title": null,
+   "type": "ORGANIZATION"
+  },
+  {
+   "cloudinaryPublicId": "vnorpiwrmg9xqm72q452",
+   "id": "profile-1702944;practice-618888;cardiologo",
+   "languages": [],
+   "link": "/cardiologo/milano/fondazione-don-gnocchi-equipe-medica-cardiologia?pid=practice-618888",
+   "location": {
+    "address": "Via Don Luigi Palazzolo 21",
+    "city": "Milano",
+    "country": "it",
+    "lat": 45.4886187,
+    "lng": 9.1443453,
+    "zipcode": "20149",
+    "distanceInMeters": null
+   },
+   "name": "Equipe medica Cardiologia",
+   "references": {
+    "id": 1702944,
+    "type": "public_profile",
+    "practiceId": 618888
+   },
+   "services": [
+    "profile",
+    "onlineBooking"
+   ],
+   "administrativeArea": [],
+   "exactMatch": true,
+   "firstName": "Fondazione Don Gnocchi -",
+   "gender": null,
+   "matchedVisitMotive": {
+    "agendaIds": [
+     2027771
+    ],
+    "allowNewPatients": true,
+    "fee": {
+     "amount": 90.0,
+     "type": "UNIQUE"
+    },
+    "insuranceSector": {
+     "split": true,
+     "type": "PRIVATE"
+    },
+    "name": "Elettrocardiogramma dinamico (holter)",
+    "visitMotiveId": 16021594
+   },
+   "minimumFee": null,
+   "onlineBooking": {
+    "agendaIds": [
+     2027771,
+     2027772
+    ],
+    "telehealth": false,
+    "bookableOrganizationSpecialities": []
+   },
+   "organizationStatus": null,
+   "paymentMeans": [],
+   "regulationSector": null,
+   "speciality": {
+    "name": "Cardiologo",
+    "slug": "cardiologo"
+   },
+   "title": "",
+   "type": "INDIVIDUAL_PRACTITIONER"
+  },
+  {
+   "cloudinaryPublicId": null,
+   "id": "directory-1660232;cardiologo",
+   "languages": [],
+   "link": "/cardiologo/milano/marina-luisa-giulia-alimento",
+   "location": {
+    "address": "VIA CARLO PAREA 4",
+    "city": "MILANO",
+    "country": "it",
+    "lat": 45.444219,
+    "lng": 9.26237,
+    "zipcode": "20138",
+    "distanceInMeters": null
+   },
+   "name": "Alimento",
+   "references": {
+    "id": 1660232,
+    "type": "directory_doctor",
+    "practiceId": null
+   },
+   "services": [],
+   "administrativeArea": [],
+   "exactMatch": true,
+   "firstName": "Marina luisa giulia",
+   "gender": "female",
+   "matchedVisitMotive": null,
+   "minimumFee": null,
+   "onlineBooking": null,
+   "organizationStatus": null,
+   "paymentMeans": [],
+   "regulationSector": null,
+   "speciality": {
+    "name": "Cardiologa",
+    "slug": "cardiologo"
+   },
+   "title": null,
+   "type": "INDIVIDUAL_PRACTITIONER"
+  }
+ ],
+ "searchedLocation": {
+  "lat": 45.4627338485376,
+  "lng": 8.759233136866708
+ }
+}

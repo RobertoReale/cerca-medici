@@ -1,0 +1,26 @@
+{
+ "availabilities": [
+  {
+   "date": "2026-07-22",
+   "slots": [
+    "2026-07-22T09:00:00.000+02:00",
+    "2026-07-22T10:00:00.000+02:00"
+   ],
+   "appointment_request_slots": []
+  },
+  {
+   "date": "2026-07-23",
+   "slots": [],
+   "appointment_request_slots": []
+  },
+  {
+   "date": "2026-07-24",
+   "slots": [
+    "2026-07-24T15:30:00.000+02:00"
+   ],
+   "appointment_request_slots": []
+  }
+ ],
+ "total": 3,
+ "next_slot": null
+}

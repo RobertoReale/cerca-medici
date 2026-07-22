@@ -1,0 +1,18 @@
+# Core scraping
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+
+# Decompressione brotli: senza questo il fetcher NON annuncia `br` (altrimenti
+# riceverebbe byte non decodificabili). Installandolo si risparmia banda.
+brotli>=1.1
+
+# CLI output
+tabulate>=0.9
+
+# GUI (opzionale, solo per app.py)
+streamlit>=1.30
+pandas>=2.0
+
+# Test (opzionale, solo per `python -m pytest tests`)
+pytest>=8.0
