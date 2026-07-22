@@ -149,6 +149,64 @@ def test_haversine_none():
     assert haversine_km(None, 9.0, 45.0, 9.0) is None
 
 
+# --- la stessa voce trovata da piu' ricerche e' una riga sola ---------------
+
+def _db_due_ricerche(tmp_path):
+    """Lo stesso studio (stessi id di portale) uscito da due ricerche in
+    comuni confinanti: i bacini di citta' vicine si sovrappongono."""
+    st = Storage(tmp_path / "dup.db")
+    for citta, quando in (("Milano", "2026-01-05 02:15:24"),
+                          ("Sesto San Giovanni", "2026-01-05 02:41:48")):
+        st.conn.execute(
+            "INSERT INTO risultati (result_id,address_id,nome,servizio,prezzo,"
+            "rating,query_specializzazione,query_citta,data_scraping,sorgente)"
+            " VALUES ('336470','458986','Dr. Rossi','Prima visita',70.0,?,"
+            "'podologo',?,?,'miodottore')",
+            (5.0 if citta.startswith("Sesto") else 4.0, citta, quando))
+    st.conn.commit()
+    return st
+
+
+def test_la_stessa_voce_da_due_ricerche_e_una_riga_sola(tmp_path):
+    st = _db_due_ricerche(tmp_path)
+    righe = search(st, Filtro())
+    st.close()
+    assert len(righe) == 1, "lo stesso record del portale compare due volte"
+
+
+def test_del_duplicato_resta_la_copia_piu_recente(tmp_path):
+    """Le due copie possono differire (il medico ha preso una recensione tra
+    una ricerca e l'altra): vale l'ultima vista, non una a caso."""
+    st = _db_due_ricerche(tmp_path)
+    righe = search(st, Filtro())
+    st.close()
+    assert righe[0]["rating"] == 5.0
+
+
+def test_il_limite_conta_le_righe_dedotte(tmp_path):
+    """Il LIMIT dopo il GROUP BY: altrimenti «due risultati» ne mostra uno vero
+    e la sua copia, e un risultato buono sparisce dal fondo."""
+    st = _db_due_ricerche(tmp_path)
+    st.conn.execute(
+        "INSERT INTO risultati (result_id,address_id,nome,servizio,prezzo,"
+        "query_specializzazione,query_citta,sorgente) VALUES "
+        "('999','999','Dr. Altro','Prima visita',80.0,'podologo','Milano',"
+        "'miodottore')")
+    st.conn.commit()
+    nomi = [r["nome"] for r in search(st, Filtro(ordina="prezzo", limite=2))]
+    st.close()
+    assert nomi == ["Dr. Rossi", "Dr. Altro"]
+
+
+def test_la_deduplica_non_lascia_colonne_di_servizio(tmp_path):
+    """`_piu_recente` serve solo a SQLite per scegliere la copia: se restasse
+    finirebbe nelle colonne del CSV esportato."""
+    st = _db_due_ricerche(tmp_path)
+    righe = search(st, Filtro())
+    st.close()
+    assert not [c for c in righe[0] if c.startswith("_")]
+
+
 if __name__ == "__main__":
     import traceback
     funcs = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

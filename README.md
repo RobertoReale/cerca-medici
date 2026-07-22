@@ -154,7 +154,7 @@ medici/
   fetcher.py          requests + rate limiting 1-3s, retry/backoff, get() e post(), rilevamento blocco
   scraper.py          Paginazione, retry, annullamento, sostituzione dei dati vecchi — non sa di che sito parla
   storage.py          SQLite (tabelle risultati + disponibilita) + export CSV/JSONL + migrazioni
-  query_engine.py     Logica condivisa CLI/GUI: filtri, ordinamento, haversine
+  query_engine.py     Logica condivisa CLI/GUI: filtri, ordinamento, haversine, deduplica per id
   unifica.py          Cluster cross-portale: stesso cognome + sedi entro 150 m
 
   sorgenti/           IL CONTRATTO: `Sorgente`, `Pagina`, `ChiaveSlot` + registro
@@ -203,6 +203,20 @@ sito sovrascriverebbe o cancellerebbe i dati di un altro.
 nello stesso database distinti dalla fonte. Un portale che si blocca o che non
 conosce quella specializzazione non ferma gli altri: viene riportato a parte.
 
+### Due tipi di duplicato, due trattamenti
+
+**Lo stesso portale, due ricerche** (sempre, automatico). I bacini di località
+vicine si sovrappongono: la stessa specializzazione cercata in due comuni
+confinanti trova due volte lo studio che sta in mezzo. Nel DB le copie restano — sono
+scaricamenti distinti, con date proprie, e uno non deve sovrascrivere l'altro —
+ma nei risultati sono **una riga sola**: stesso portale, stesso `result_id`,
+stesso `address_id`, stesso servizio è lo stesso record, non c'è niente da
+indovinare. Vale la copia scaricata più di recente. Il raggruppamento avviene
+prima di `ORDER BY`/`LIMIT`, altrimenti «limite 100» renderebbe 100 righe di cui
+alcune sono la stessa e altrettanti risultati veri sparirebbero dal fondo.
+
+**Due portali diversi** (opzionale, `--unifica`): sotto.
+
 ### Unificare i duplicati (`--unifica`)
 
 Nessun identificativo è condiviso tra i due portali: il `result_id` 1620432
@@ -225,8 +239,12 @@ vengono buttati via**:
 
 Perché non si comprime e basta: un minimo senza il portale che lo pratica non è
 prenotabile, e uno scarto di 80 € sullo stesso medico è di per sé un'informazione
-(listini non allineati, servizi diversi con lo stesso nome, un prezzo vecchio da
-una parte). Se un portale non pubblica il prezzo, il cluster dice «n/d» invece di
+(listini non allineati, un prezzo vecchio da una parte). Quando invece i portali
+quotano **prestazioni diverse** — capita: la prima visita su uno, un trattamento
+specifico sull'altro — il nome della prestazione compare accanto a ogni prezzo
+(`Doctolib 50 € (Prima visita podologica) · MioDottore 70 € (Trattamento
+onicocriptosi)`), perché altrimenti i due numeri si leggerebbero come uno scarto
+di listino sulla stessa cosa. Se un portale non pubblica il prezzo, il cluster dice «n/d» invece di
 riempire il buco con il valore dell'altro.
 
 L'unificazione è **opzionale** e spenta di default (`--unifica`, checkbox nella

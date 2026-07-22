@@ -138,6 +138,18 @@ def _formatta_prezzo(riga: dict) -> str:
     return f"{'da ' if riga.get('prezzo_e_da_min') else ''}{p:g} €"
 
 
+def _servizi_diversi(gruppo: Sequence[dict]) -> bool:
+    """Se i portali del cluster stanno quotando prestazioni diverse.
+
+    Capita davvero: lo stesso podologo pubblica su un portale la prima visita e
+    sull'altro un trattamento specifico. I due prezzi restano utili — sono
+    comunque quel medico — ma messi vicini senza dirlo si leggono come uno
+    scarto di listino sulla stessa prestazione, che e' una conclusione sbagliata.
+    """
+    return len({(r.get("servizio") or "").strip().casefold()
+                for r in gruppo}) > 1
+
+
 def raggruppa(righe: Sequence[dict], soglia_metri: float = SOGLIA_METRI
               ) -> List[List[dict]]:
     """Le righe divise in cluster (liste), nell'ordine di ingresso.
@@ -207,9 +219,17 @@ def _fondi(gruppo: Sequence[dict], etichetta) -> dict:
     fuso["n_fonti"] = len({r.get("sorgente") for r in gruppo})
     # Ordine stabile e leggibile: prima il portale piu' economico, cioe' lo
     # stesso ordine con cui e' stato scelto il rappresentante.
-    fuso["disponibile_su"] = " · ".join(
-        f"{etichetta(r.get('sorgente') or '')} {_formatta_prezzo(r)}"
-        for r in ordinate)
+    # Il servizio si scrive accanto al prezzo solo quando i portali non quotano
+    # la stessa prestazione: sempre allungherebbe ogni riga con un'informazione
+    # gia' presente nella colonna «servizio».
+    mostra_servizio = _servizi_diversi(gruppo)
+
+    def _voce(r: dict) -> str:
+        voce = f"{etichetta(r.get('sorgente') or '')} {_formatta_prezzo(r)}"
+        servizio = (r.get("servizio") or "").strip()
+        return f"{voce} ({servizio})" if mostra_servizio and servizio else voce
+
+    fuso["disponibile_su"] = " · ".join(_voce(r) for r in ordinate)
     return fuso
 
 

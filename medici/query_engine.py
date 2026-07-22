@@ -159,6 +159,31 @@ def _build_where(f: Filtro) -> tuple[str, list]:
     return where, params
 
 
+# Lo stesso medico, la stessa sede, lo stesso servizio: una riga sola, anche se
+# e' stato trovato da piu' ricerche.
+#
+# In tabella `risultati` la stessa voce di listino c'e' una volta PER RICERCA,
+# perche' l'indice unico include `query_citta` — ed e' giusto cosi': la stessa
+# specializzazione cercata in due comuni sono due scaricamenti distinti, con date
+# proprie, e uno non deve sovrascrivere l'altro. Ma i bacini di citta' vicine si
+# sovrappongono, quindi lo stesso studio esce da entrambe: chi legge i risultati
+# vede la stessa riga due o tre volte senza che nulla la distingua.
+#
+# Il raggruppamento e' qui e non in `unifica.py` perche' non e' lo stesso
+# problema: la' si riconoscono *per somiglianza* due righe di portali diversi
+# (ed e' opzionale, perche' puo' sbagliare); qui le righe sono lo stesso record
+# identificato dagli id del portale, quindi non c'e' niente da indovinare e
+# niente da scegliere — vanno collassate sempre, anche a unificazione spenta.
+#
+# La chiave e' quella dell'indice unico meno `query_citta`. `MAX(data_scraping)`
+# non serve al chiamante: e' li' perche' con un solo aggregato min/max SQLite
+# garantisce che le altre colonne vengano dalla riga corrispondente, cioe' dalla
+# copia piu' fresca invece che da una a caso. Viene tolto prima di restituire.
+_DEDUP_SQL = (" GROUP BY sorgente, COALESCE(result_id,''), "
+              "COALESCE(address_id,''), COALESCE(servizio,'')")
+_DEDUP_COL = ", MAX(data_scraping) AS _piu_recente"
+
+
 def _disponibilita_join(f: Filtro) -> tuple[str, str, list]:
     """Se richiesto 'disponibile entro N giorni', calcola la prima disponibilita."""
     if f.disponibile_entro_giorni is None and f.ordina != "disponibilita":
@@ -239,8 +264,14 @@ def search(storage: Storage, f: Filtro) -> List[dict]:
         if f.limite:
             limit_sql = f" LIMIT {int(f.limite)}"
 
-    sql = f"SELECT risultati.*{select_extra} FROM risultati{where}{order_sql}{limit_sql}"
+    # Il GROUP BY sta PRIMA di ORDER BY/LIMIT: le copie vanno tolte mentre si
+    # conta, altrimenti «limite 100» restituisce 100 righe di cui alcune sono la
+    # stessa, e sparisce dal fondo un risultato vero per ognuna.
+    sql = (f"SELECT risultati.*{select_extra}{_DEDUP_COL} FROM risultati"
+           f"{where}{_DEDUP_SQL}{order_sql}{limit_sql}")
     results = [dict(r) for r in storage.query(sql, where_params + avail_params)]
+    for r in results:
+        r.pop("_piu_recente", None)
 
     if f.unifica_duplicati:
         # Import locale: `unifica` importa `haversine_km` da qui, e a livello di

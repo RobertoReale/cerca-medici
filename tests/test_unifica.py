@@ -148,6 +148,30 @@ def test_i_prezzi_dei_singoli_portali_restano_visibili():
     assert "Doctolib 100 €" in testo and "MioDottore 120 €" in testo
 
 
+def test_prezzi_di_prestazioni_diverse_sono_etichettati():
+    """Lo stesso podologo quota su un portale la prima visita e sull'altro un
+    trattamento: senza il nome della prestazione i due numeri si leggono come
+    uno scarto di listino, che e' una conclusione sbagliata."""
+    a = _riga("Dott.ssa Elisa Figura", "miodottore", prezzo=70.0,
+              servizio="Trattamento onicocriptosi")
+    b = _spostata(_riga("Dott. ELISA FIGURA", "doctolib", prezzo=50.0,
+                        servizio="Prima visita podologica"), 5)
+    testo = _unifica([a, b])[0]["disponibile_su"]
+    assert "Doctolib 50 € (Prima visita podologica)" in testo
+    assert "MioDottore 70 € (Trattamento onicocriptosi)" in testo
+
+
+def test_stessa_prestazione_resta_senza_etichetta():
+    """Quando i portali quotano la stessa cosa il nome e' gia' nella colonna
+    «servizio»: ripeterlo due volte allunga ogni riga per niente."""
+    a = _riga("Evo Medical", "miodottore", prezzo=70.0, tipo="clinic",
+              servizio="Prima visita podologica")
+    b = _spostata(_riga("Evo Medical", "doctolib", prezzo=70.0, tipo="clinic",
+                        servizio="Prima visita podologica"), 50)
+    assert _unifica([a, b])[0]["disponibile_su"] == \
+        "MioDottore 70 € · Doctolib 70 €"
+
+
 def test_prezzo_mancante_dichiarato_non_riempito():
     """Se un portale non pubblica il prezzo, il cluster deve dirlo: la mancanza
     va vista, non colmata col valore dell'altro."""
