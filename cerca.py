@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""cerca.py — CLI di MioDottore scraper.
+"""cerca.py — CLI di cerca-medici.
 
-Due modalita':
-  1. Scraping:   scarica anagrafica/prezzi (e opzionalmente disponibilita).
-  2. Consultazione: interroga il DB locale con ordinamento/filtri.
+Tre comandi:
+  1. `scrape`: scarica anagrafica/prezzi (e opzionalmente disponibilita).
+  2. `cerca`:  interroga il DB locale con ordinamento/filtri.
+  3. `stato`:  cosa c'e' gia' nel DB, per non riscaricare quello che hai gia'.
+
+Fa tutto quello che fa la GUI (`streamlit run app.py`) e viceversa: la tabella
+di corrispondenza fra le due interfacce e' nel README.
 
 Esempi:
   # Scrape (popola il DB)
@@ -15,7 +19,12 @@ Esempi:
   python cerca.py cerca --specializzazione podologo --citta Milano --ordina rating --min-recensioni 50
   python cerca.py cerca --specializzazione podologo --citta Milano --disponibile-entro 3 --ordina prezzo
   python cerca.py cerca --specializzazione podologo --citta Milano --ordina distanza --vicino-a 45.4642,9.1900
+  python cerca.py cerca --ricerca podologo Milano --colonne tutte
   python cerca.py cerca ... --export risultati.csv
+
+  # Cosa c'e' nel database
+  python cerca.py stato
+  python cerca.py stato --servizi --fonti
 """
 from __future__ import annotations
 
@@ -27,7 +36,9 @@ import sys
 from tabulate import tabulate
 
 from medici.storage import Storage
-from medici.query_engine import Filtro, avvisi, search, stats
+from medici.query_engine import (
+    ORDINA, Filtro, avvisi, colonne_visibili, search, stats,
+)
 from medici.scraper import risolvi_sorgente, scrape_search
 from medici.sorgenti import elenco as sorgenti_disponibili, etichetta_di
 from medici.testo import console_utf8
@@ -60,9 +71,29 @@ def _fonti_richieste(args) -> list:
     return list(dict.fromkeys(args.fonte))
 
 
+def _eta_testo(ore: float) -> str:
+    """Quanto sono vecchi i dati, nell'unita' in cui si legge senza dividere."""
+    if ore < 1:
+        return f"{int(ore * 60)} min"
+    if ore < 48:
+        return f"{int(ore)} h"
+    return f"{int(ore / 24)} g"
+
+
 def cmd_scrape(args) -> int:
     storage = Storage(args.db)
     fonti = _fonti_richieste(args)
+
+    # Riscaricare dati di un'ora fa costa minuti di richieste ai portali e non
+    # cambia niente: la GUI lo dice prima di partire, e qui serviva altrettanto.
+    # Solo un avviso, non un blocco — l'aggiornamento resta una scelta di chi
+    # lancia il comando.
+    _eta = storage.eta_dati_ore(args.specializzazione, args.citta)
+    if _eta is not None:
+        print(f"Nota: hai già dati di {args.specializzazione}/{args.citta} di "
+              f"{_eta_testo(_eta)} fa. Per consultarli senza riscaricare: "
+              f"python cerca.py cerca --ricerca {args.specializzazione} "
+              f"{args.citta}", file=sys.stderr)
 
     # Ctrl-C: invece di un traceback a meta' pagina, alziamo un flag e lasciamo
     # che lo scraper chiuda il giro e riporti quanto ha gia' salvato.
@@ -160,6 +191,44 @@ def _fmt_prezzo(r):
     return ("da " + p) if r.get("prezzo_e_da_min") else p
 
 
+def _righe_base(results, args) -> list:
+    """La tabella stretta: le colonne con cui si sceglie un medico, e basta.
+
+    Il terminale non ha lo scorrimento orizzontale della GUI: mostrare tutte le
+    colonne del DB manderebbe a capo ogni riga. Chi le vuole usa
+    `--colonne tutte` / `tecniche`, che e' l'equivalente della casella «mostra
+    le colonne tecniche».
+    """
+    # La colonna Fonte compare solo quando serve davvero a distinguere: con un
+    # solo portale nel risultato sarebbe una colonna costante che ruba spazio.
+    # Con `--unifica` la sostituisce «Disponibile su», che dice di piu'.
+    piu_fonti = not args.unifica and len({r.get("sorgente") for r in results}) > 1
+    # Colonne che variano leggermente in base al criterio di ordinamento.
+    rows = []
+    for r in results:
+        row = {
+            **({"Fonte": etichetta_di(r.get("sorgente") or "")} if piu_fonti else {}),
+            "Nome": (r.get("nome") or "")[:32],
+            "Indirizzo": (r.get("indirizzo") or "")[:28],
+            "Città": r.get("citta") or "",
+            "Servizio": (r.get("servizio") or "")[:26],
+            "Prezzo": _fmt_prezzo(r),
+            "Rating": r.get("rating") if r.get("rating") is not None else "",
+            "Rec.": r.get("n_recensioni") or 0,
+        }
+        if args.unifica:
+            row["Disponibile su"] = r.get("disponibile_su") or ""
+        if args.ordina == "disponibilita" or args.disponibile_entro:
+            row = {"1a disp.": r.get("prima_disponibilita") or "—", **row}
+        if args.ordina == "distanza" and r.get("distanza_km") is not None:
+            # Con l'unita' dentro la cella: `tabulate` riconosce "8.0" come
+            # numero e lo ristampa come "8", buttando via il decimale — che a
+            # distanze urbane e' proprio la parte che distingue due studi.
+            row["Distanza"] = f"{r['distanza_km']:.1f} km"
+        rows.append(row)
+    return rows
+
+
 def cmd_cerca(args) -> int:
     vicino_lat, vicino_lng = _parse_vicino_a(args.vicino_a)
     # Nella consultazione "tutte" significa "non filtrare per sorgente": lascia
@@ -168,6 +237,7 @@ def cmd_cerca(args) -> int:
     f = Filtro(
         specializzazione=args.specializzazione,
         citta=args.citta,
+        ricerca=tuple(args.ricerca) if args.ricerca else None,
         servizio=args.servizio,
         sorgenti=fonti,
         min_recensioni=args.min_recensioni,
@@ -199,33 +269,14 @@ def cmd_cerca(args) -> int:
         return 0
 
     s = stats(results)
-    # La colonna Fonte compare solo quando serve davvero a distinguere: con un
-    # solo portale nel risultato sarebbe una colonna costante che ruba spazio.
-    # Con `--unifica` la sostituisce «Disponibile su», che dice di piu'.
-    piu_fonti = not args.unifica and len({r.get("sorgente") for r in results}) > 1
-    # Colonne che variano leggermente in base al criterio di ordinamento.
-    rows = []
-    for r in results:
-        row = {
-            **({"Fonte": etichetta_di(r.get("sorgente") or "")} if piu_fonti else {}),
-            "Nome": (r.get("nome") or "")[:32],
-            "Indirizzo": (r.get("indirizzo") or "")[:28],
-            "Città": r.get("citta") or "",
-            "Servizio": (r.get("servizio") or "")[:26],
-            "Prezzo": _fmt_prezzo(r),
-            "Rating": r.get("rating") if r.get("rating") is not None else "",
-            "Rec.": r.get("n_recensioni") or 0,
-        }
-        if args.unifica:
-            row["Disponibile su"] = r.get("disponibile_su") or ""
-        if args.ordina == "disponibilita" or args.disponibile_entro:
-            row = {"1a disp.": r.get("prima_disponibilita") or "—", **row}
-        if args.ordina == "distanza" and r.get("distanza_km") is not None:
-            # Con l'unita' dentro la cella: `tabulate` riconosce "8.0" come
-            # numero e lo ristampa come "8", buttando via il decimale — che a
-            # distanze urbane e' proprio la parte che distingue due studi.
-            row["Distanza"] = f"{r['distanza_km']:.1f} km"
-        rows.append(row)
+    if args.colonne == "base":
+        rows = _righe_base(results, args)
+    else:
+        # Le stesse colonne, nello stesso ordine, che mostra la GUI: la
+        # selezione vive in `query_engine`, non una copia per interfaccia.
+        cols = colonne_visibili(results, tecniche=args.colonne == "tecniche")
+        rows = [{c: (etichetta_di(r.get(c) or "") if c == "sorgente"
+                     else r.get(c)) for c in cols} for r in results]
 
     print(tabulate(rows, headers="keys", tablefmt="simple_outline"))
     # Forma neutra: «1 su 1 risultati hanno» non si puo' leggere.
@@ -247,6 +298,57 @@ def cmd_cerca(args) -> int:
         else:
             n = Storage.export_rows_csv(results, args.export)
         print(f"Esportato: {args.export} ({n} righe)")
+    return 0
+
+
+# --- comando stato ----------------------------------------------------------
+
+def cmd_stato(args) -> int:
+    """Cosa c'e' gia' nel database, senza toccare la rete.
+
+    E' l'equivalente del pannello «Dati già nel database» della GUI, e serve
+    alla stessa cosa: sapere se una ricerca e' gia' stata fatta — e quanto e'
+    vecchia — prima di spendere minuti a rifarla.
+    """
+    with Storage(args.db) as st:
+        print(f"Database: {st.db_path}")
+        n_ris, n_disp = st.count_risultati(), st.count_disponibilita()
+        print(f"Righe: {n_ris} · slot di disponibilità: {n_disp}")
+        if n_ris == 0:
+            print("\nDB vuoto: esegui 'python cerca.py scrape --specializzazione "
+                  "... --citta ...'")
+            return 0
+
+        righe = []
+        for r in st.riepilogo_query():
+            eta = st.eta_dati_ore(r["spec"], r["citta"], sorgente=r["sorgente"])
+            righe.append({
+                "Fonte": etichetta_di(r["sorgente"]),
+                "Specializzazione": r["spec"],
+                "Città": r["citta"],
+                "Righe": r["righe"],
+                "Scaricata": r["ultimo"],
+                "Età": _eta_testo(eta) if eta is not None else "—",
+            })
+        print(f"\nRicerche già scaricate ({len(righe)}):")
+        print(tabulate(righe, headers="keys", tablefmt="simple_outline"))
+        print("Rivedile senza riscaricare nulla: "
+              "python cerca.py cerca --ricerca <specializzazione> <città>")
+
+        if args.fonti:
+            presenti = st.sorgenti_presenti()
+            print("\nPortali con dati nel DB: "
+                  + (", ".join(f"{etichetta_di(s)} ({s})" for s in presenti)
+                     or "nessuno"))
+            print("Portali registrati (utilizzabili con --fonte): "
+                  + ", ".join(f"{etichetta_di(s)} ({s})"
+                              for s in sorgenti_disponibili()))
+        if args.servizi:
+            noti = st.servizi_noti()
+            print(f"\nServizi presenti nel DB ({len(noti)}), utilizzabili con "
+                  f"--servizio:")
+            for s in noti:
+                print(f"  {s}")
     return 0
 
 
@@ -283,19 +385,38 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sc = sub.add_parser("scrape", help="Scarica i dati nel DB locale")
-    sc.add_argument("--specializzazione", required=True)
-    sc.add_argument("--citta", required=True)
+    sc.add_argument("--specializzazione", required=True,
+                    help="Come la scrivi sul portale (es. podologo). I portali "
+                         "non la chiamano allo stesso modo: la traduzione è "
+                         "automatica e, se fallisce, l'errore elenca le alternative")
+    sc.add_argument("--citta", required=True, help="Città da cercare (es. Milano)")
     _aggiungi_fonte(sc, "Portali da interrogare.")
-    sc.add_argument("--max-pagine", type=_positivo, default=40)
+    sc.add_argument("--max-pagine", type=_positivo, default=40, metavar="N",
+                    help="Quante pagine di risultati scaricare al massimo "
+                         "(default: 40). Attenzione: un giro più corto del "
+                         "precedente considera «spariti» i medici delle pagine "
+                         "non visitate e li rimuove")
     sc.add_argument("--disponibilita", action="store_true",
                     help="Raccogli anche gli slot orari (endpoint /api/v3 — vedi README)")
-    sc.add_argument("--giorni", type=_positivo, default=5,
-                    help="Giorni di disponibilità da raccogliere")
+    sc.add_argument("--giorni", type=_positivo, default=5, metavar="N",
+                    help="Giorni di disponibilità da raccogliere (default: 5). "
+                         "Ha effetto solo con --disponibilita")
     sc.set_defaults(func=cmd_scrape)
 
     ce = sub.add_parser("cerca", help="Interroga il DB locale")
-    ce.add_argument("--specializzazione")
-    ce.add_argument("--citta")
+    ce.add_argument("--specializzazione",
+                    help="Filtra per specializzazione (confronto ampio: prende "
+                         "sia la ricerca con cui è stata scaricata sia la "
+                         "specializzazione dichiarata dal medico)")
+    ce.add_argument("--citta", help="Filtra per città, con lo stesso confronto ampio")
+    ce.add_argument("--ricerca", nargs=2, metavar=("SPEC", "CITTA"), default=None,
+                    help="Mostra SOLO uno scaricamento preciso, confrontando "
+                         "esatti i termini con cui è stato lanciato: "
+                         "--ricerca podologo Milano. Serve dopo aver scaricato "
+                         "più specializzazioni, quando --specializzazione (che "
+                         "allarga) le mescolerebbe. Equivale alla vista «stai "
+                         "vedendo solo la ricerca X/Y» della GUI; l'elenco è in "
+                         "'cerca.py stato'")
     _aggiungi_fonte(ce, "Da quali portali mostrare i risultati già scaricati.")
     ce.add_argument("--servizio",
                     help="Parole chiave del servizio, in qualsiasi ordine: "
@@ -303,31 +424,63 @@ def build_parser() -> argparse.ArgumentParser:
                          "controllo'")
     ce.add_argument("--prezzo-max", type=float, default=None,
                     help="Spesa massima in € (esclude chi non pubblica il prezzo)")
-    ce.add_argument("--prezzo-min", type=float, default=None)
-    ce.add_argument("--ordina", choices=["prezzo", "rating", "recensioni", "disponibilita", "distanza"],
-                    default="prezzo")
+    ce.add_argument("--prezzo-min", type=float, default=None,
+                    help="Spesa minima in € (esclude chi non pubblica il prezzo)")
+    ce.add_argument("--ordina", choices=list(ORDINA), default="prezzo",
+                    help="Criterio di ordinamento (default: prezzo). Ogni "
+                         "criterio ha il suo verso naturale — prezzo, "
+                         "disponibilità e distanza crescenti, rating e "
+                         "recensioni decrescenti — e i valori mancanti restano "
+                         "in coda in entrambi i versi. 'distanza' richiede "
+                         "--vicino-a, 'disponibilita' uno scrape con "
+                         "--disponibilita")
     ce.add_argument("--desc", "--inverti", dest="desc", action="store_true",
                     help="Inverte l'ordine naturale del criterio (prezzo: dal piu' "
                          "caro; rating: dal peggiore)")
-    ce.add_argument("--min-recensioni", type=int, default=0)
-    ce.add_argument("--min-rating", type=float, default=0.0)
+    ce.add_argument("--min-recensioni", type=int, default=0, metavar="N",
+                    help="Solo chi ha almeno N recensioni (default: 0)")
+    ce.add_argument("--min-rating", type=float, default=0.0, metavar="VOTO",
+                    help="Solo chi ha almeno questo voto, da 0 a 5 (default: 0)")
     ce.add_argument("--solo-con-prezzo", action="store_true",
                     help="Escludi chi non ha prezzo pubblicato")
     ce.add_argument("--solo-prenotabili", action="store_true",
                     help="Solo chi ha l'agenda online attiva (gli altri si "
                          "prenotano per telefono)")
-    ce.add_argument("--disponibile-entro", type=int, default=None,
-                    help="Solo chi ha uno slot entro N giorni")
+    ce.add_argument("--disponibile-entro", type=int, default=None, metavar="N",
+                    help="Solo chi ha uno slot prenotabile entro N giorni "
+                         "(richiede uno scrape fatto con --disponibilita)")
     ce.add_argument("--unifica", action="store_true",
                     help="Fondi in una riga sola lo stesso medico trovato su "
                          "più portali: il prezzo mostrato è il minimo, la "
                          "colonna «Disponibile su» li elenca tutti")
-    ce.add_argument("--vicino-a", default=None, help="lat,lng per ordinare per distanza")
-    ce.add_argument("--limite", type=int, default=None)
+    ce.add_argument("--vicino-a", default=None,
+                    help="Punto di riferimento 'lat,lng' (es. 45.4642,9.1900): "
+                         "aggiunge la distanza e abilita --ordina distanza")
+    ce.add_argument("--limite", type=int, default=None,
+                    help="Massimo numero di risultati (default: tutti)")
+    ce.add_argument("--colonne", choices=["base", "tutte", "tecniche"],
+                    default="base",
+                    help="Quante colonne mostrare. base: quelle con cui si "
+                         "sceglie un medico (default). tutte: tutte le colonne "
+                         "utili, compresi url del profilo e prenotabilità. "
+                         "tecniche: anche id, coordinate e data di scraping "
+                         "(la casella «mostra le colonne tecniche» della GUI). "
+                         "Non tocca --export, che scrive sempre tutto")
     ce.add_argument("--export", default=None,
-                    help="Esporta i risultati: .csv per CSV (default), "
+                    help="Esporta i risultati (tutte le colonne) nel file "
+                         "indicato: .csv per CSV con BOM per Excel (default), "
                          ".jsonl/.ndjson per JSON Lines")
     ce.set_defaults(func=cmd_cerca)
+
+    stt = sub.add_parser("stato",
+                         help="Cosa c'è già nel DB (ricerche, età, servizi)")
+    stt.add_argument("--servizi", action="store_true",
+                     help="Elenca anche i nomi di servizio presenti, da usare "
+                          "con 'cerca --servizio'")
+    stt.add_argument("--fonti", action="store_true",
+                     help="Elenca anche i portali registrati e quelli che "
+                          "hanno già dati nel DB")
+    stt.set_defaults(func=cmd_stato)
     return p
 
 

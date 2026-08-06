@@ -345,3 +345,45 @@ def stats(results: Sequence[dict]) -> dict:
     con_prezzo = sum(1 for r in results if r.get("prezzo") is not None)
     return {"totale": tot, "con_prezzo": con_prezzo,
             "senza_prezzo": tot - con_prezzo}
+
+
+# --- colonne da mostrare ----------------------------------------------------
+# Quali colonne si vedono, e in che ordine, e' una decisione sola: stava scritta
+# due volte (una in `cerca.py`, una in `app.py`) e le due copie divergevano a
+# ogni colonna nuova — la GUI mostrava `url_profilo`, la CLI no, senza che
+# nessuna delle due lo avesse deciso.
+
+#: Prima le colonne con cui si sceglie un medico, nell'ordine in cui si leggono.
+#: Le altre colonne del DB seguono, nell'ordine in cui arrivano dalla query.
+COLONNE_PRINCIPALI = (
+    "sorgente", "disponibile_su", "nome", "indirizzo", "citta", "servizio",
+    "prezzo", "prezzo_e_da_min", "rating", "n_recensioni", "ha_calendario",
+    "prima_disponibilita", "distanza_km", "url_profilo",
+)
+
+#: Identificativi interni, coordinate e timestamp: servono a far funzionare il
+#: programma e a verificare un dato sospetto, non a scegliere un medico. In
+#: mezzo alle altre obbligano a scorrere di lato per arrivare al prezzo, quindi
+#: di default restano fuori — in entrambe le interfacce.
+COLONNE_TECNICHE = (
+    "id", "result_id", "address_id", "servizio_id", "lat", "lng",
+    "query_specializzazione", "query_citta", "data_scraping", "prezzo_raw",
+    "n_fonti",
+)
+
+
+def colonne_visibili(righe: Sequence[dict], tecniche: bool = False) -> List[str]:
+    """Le colonne di `righe` ordinate per utilita', tecniche escluse o incluse.
+
+    L'unione delle chiavi e non quelle della prima riga: `distanza_km` e
+    `disponibile_su` esistono solo in certe combinazioni di filtri, e una riga
+    campione presa a caso non basta a saperlo.
+    """
+    viste: dict = {}
+    for r in righe:
+        viste.update(dict.fromkeys(r.keys()))
+    ordinate = [c for c in COLONNE_PRINCIPALI if c in viste]
+    ordinate += [c for c in viste if c not in COLONNE_PRINCIPALI]
+    if not tecniche:
+        ordinate = [c for c in ordinate if c not in COLONNE_TECNICHE]
+    return ordinate

@@ -13,8 +13,10 @@ import logging
 import pandas as pd
 import streamlit as st
 
-from medici.storage import Storage
-from medici.query_engine import Filtro, avvisi, search, stats
+from medici.storage import DEFAULT_DB, Storage
+from medici.query_engine import (
+    ORDINA, Filtro, avvisi, colonne_visibili, search, stats,
+)
 from medici.scraper import risolvi_sorgente, scrape_search
 from medici.sorgenti import elenco as sorgenti_disponibili, etichetta_di
 
@@ -30,8 +32,14 @@ st.title("🩺 Cerca medici")
 
 
 @st.cache_resource
-def storage_corrente() -> Storage:
-    return Storage()
+def storage_corrente(db_path: str | None = None) -> Storage:
+    """La connessione al DB scelto. Una per percorso, tenuta in cache.
+
+    L'argomento fa parte della chiave di cache: cambiare percorso apre una
+    seconda connessione invece di riusare quella sbagliata, e tornare al
+    percorso di prima non ne riapre una terza.
+    """
+    return Storage(db_path or None)
 
 
 # Streamlit riesegue app.py a ogni interazione ma NON re-importa i moduli:
@@ -107,6 +115,27 @@ st.sidebar.button(
          "specializzazione. I dati già scaricati restano nel database e si "
          "rivedono con un clic: non serve rifare lo scraping.")
 
+# Gli equivalenti delle due opzioni globali della CLI (`--db`, `--verbose`).
+# Chiuso di default perche' non servono quasi mai, ma senza di loro la GUI era
+# inchiodata a un database solo: chi teneva raccolte separate (una per citta',
+# o una di prova) poteva usarle solo da riga di comando.
+with st.sidebar.expander("⚙️ Impostazioni avanzate"):
+    db_scelto = st.text_input(
+        "Database SQLite", value="", placeholder=str(DEFAULT_DB),
+        help="Lascia vuoto per il database predefinito (data/medici.db, con "
+             "fallback sul vecchio data/miodottore.db se presente). È la "
+             "stessa opzione di `--db` nella CLI: un percorso diverso apre una "
+             "raccolta separata, e un file che non esiste viene creato vuoto.")
+    log_esteso = st.checkbox(
+        "Log dettagliato", value=True,
+        help="Come `--verbose` nella CLI: pagina per pagina, quante schede e "
+             "quante righe. Compare nel terminale da cui hai lanciato "
+             "`streamlit run`, non in questa pagina.")
+# Il livello si applica al logger radice a ogni rerun: e' quello che rende la
+# casella effettiva senza riavviare streamlit.
+logging.getLogger().setLevel(logging.INFO if log_esteso else logging.WARNING)
+DB_SCELTO = db_scelto.strip() or None
+
 st.sidebar.header("1. Scraping (popola il DB)")
 with st.sidebar.form("scrape_form"):
     sc_spec = st.text_input("Specializzazione", value="podologo")
@@ -118,9 +147,16 @@ with st.sidebar.form("scrape_form"):
         format_func=etichetta_di,
         help="Ogni portale viene interrogato separatamente e i risultati "
              "finiscono nello stesso database, distinti dalla colonna «fonte».")
-    sc_pagine = st.number_input("Max pagine", 1, 40, 5)
+    # Gli stessi estremi della CLI (`--max-pagine`, `--giorni`), che non ha un
+    # tetto: prima la GUI si fermava a 40 pagine e 14 giorni, quindi le raccolte
+    # piu' grandi si potevano fare solo da riga di comando.
+    sc_pagine = st.number_input(
+        "Max pagine", 1, 500, 5,
+        help="Attenzione: un giro più corto del precedente considera «spariti» "
+             "i medici delle pagine che non ha visitato, e li rimuove.")
     sc_disp = st.checkbox("Raccogli disponibilità (endpoint /api/v3 — vedi README)")
-    sc_giorni = st.number_input("Giorni disponibilità", 1, 14, 5)
+    sc_giorni = st.number_input("Giorni disponibilità", 1, 90, 5,
+                                help="Ha effetto solo con la casella qui sopra.")
     submitted = st.form_submit_button("Avvia scraping")
 st.sidebar.caption("Per fermarlo: **Stop** in alto a destra. I dati già "
                    "scaricati restano nel database; poi ricarica la pagina "
@@ -129,7 +165,7 @@ st.sidebar.caption("Per fermarlo: **Stop** in alto a destra. I dati già "
 # Quanto sono vecchi i dati di QUESTA ricerca: senza, l'unico modo per saperlo
 # era riscaricare tutto — cioe' proprio la cosa che si voleva evitare.
 _eta = (None if _MANCANTI
-        else storage_corrente().eta_dati_ore(sc_spec, sc_citta))
+        else storage_corrente(DB_SCELTO).eta_dati_ore(sc_spec, sc_citta))
 if _eta is not None:
     if _eta < 1:
         st.sidebar.success(f"Dati di {sc_spec}/{sc_citta} aggiornati "
@@ -173,7 +209,7 @@ elif submitted:
             if annullamento_richiesto():
                 break
             reports.append(scrape_search(
-                sc_spec, sc_citta, sorgente=_src, storage=storage_corrente(),
+                sc_spec, sc_citta, sorgente=_src, storage=storage_corrente(DB_SCELTO),
                 max_pagine=int(sc_pagine),
                 disponibilita=sc_disp,
                 giorni_disponibilita=int(sc_giorni),
@@ -217,7 +253,7 @@ elif submitted:
         st.session_state["vista"] = (sc_spec, sc_citta)
 
 
-storage = storage_corrente()
+storage = storage_corrente(DB_SCELTO)
 
 # I filtri lavorano SOLO sul database: cambiare servizio o prezzo non fa
 # ripartire nessuno scraping. Mostrare cosa c'e' gia' evita di riscaricarlo.
@@ -238,6 +274,16 @@ st.sidebar.button(
 # Le opzioni sono i portali PRESENTI NEL DB, non quelli registrati: offrire un
 # filtro su una fonte mai scaricata darebbe solo zero risultati.
 _fonti_db = [] if _MANCANTI else storage.sorgenti_presenti()
+# La selezione salvata sopravvive al cambiare delle opzioni, e questo la rendeva
+# sbagliata proprio nel momento peggiore: con il DB ancora vuoto non c'e' nessun
+# portale da selezionare, quindi resta memorizzata la lista vuota, e subito dopo
+# il PRIMO scraping la tabella risultava vuota — con tutti gli altri filtri
+# sotto accusa. Stesso effetto cambiando database dalle impostazioni avanzate.
+# Quando l'elenco dei portali cambia si riparte quindi da «tutti»; una
+# deselezione fatta a mano non lo tocca, perche' li' le opzioni restano quelle.
+if st.session_state.get("_fonti_opzioni") != _fonti_db:
+    st.session_state["_fonti_opzioni"] = _fonti_db
+    st.session_state.pop("f_fonti", None)
 f_fonti = st.sidebar.multiselect(
     "Fonti", _fonti_db, default=_fonti_db, format_func=etichetta_di, key="f_fonti",
     help="Deseleziona un portale per escluderlo dai risultati mostrati.")
@@ -262,8 +308,10 @@ f_prezzo_min = c_min.number_input("Prezzo min €", 0, 5000, 0, 10, key="f_prezz
 f_prezzo_max = c_max.number_input("Prezzo max € (0=off)", 0, 5000, 0, 10,
                                   key="f_prezzo_max")
 f_ordina = st.sidebar.selectbox(
-    "Ordina per", ["prezzo", "rating", "recensioni", "disponibilita", "distanza"],
-    key="f_ordina")
+    "Ordina per", list(ORDINA), key="f_ordina",
+    help="Ogni criterio ha il suo verso naturale (prezzo, disponibilità e "
+         "distanza crescenti; rating e recensioni decrescenti) e tiene i valori "
+         "mancanti in coda in entrambi i versi.")
 f_desc = st.sidebar.checkbox(
     "Inverti ordinamento", key="f_desc",
     help="Prezzo: dal più caro. Rating/recensioni: dal peggiore.")
@@ -394,25 +442,14 @@ if not results:
 df = pd.DataFrame(results)
 if "sorgente" in df.columns:
     df["sorgente"] = df["sorgente"].map(etichetta_di)
-# Colonne principali in testa, poi il resto.
-preferite = [c for c in [
-    "sorgente", "disponibile_su", "nome", "indirizzo", "citta", "servizio",
-    "prezzo", "prezzo_e_da_min", "rating", "n_recensioni", "ha_calendario",
-    "prima_disponibilita", "distanza_km", "url_profilo",
-] if c in df.columns]
-altre = [c for c in df.columns if c not in preferite]
-df = df[preferite + altre]
 
-# Gli identificativi interni, le coordinate e i timestamp servono a far
-# funzionare il programma, non a scegliere un medico: in mezzo alle colonne
-# utili obbligano a scorrere di lato per arrivare al prezzo. Restano a un clic
-# di distanza perche' sono cio' che serve per verificare un dato sospetto.
-TECNICHE = ("id", "result_id", "address_id", "servizio_id", "lat", "lng",
-            "query_specializzazione", "query_citta", "data_scraping",
-            "prezzo_raw", "n_fonti")
-if not st.checkbox("Mostra le colonne tecniche (id, coordinate, data di "
-                   "scraping)", value=False, key="mostra_tecniche"):
-    df = df.drop(columns=[c for c in TECNICHE if c in df.columns])
+# Quali colonne, e in che ordine: la regola sta in `query_engine`, la stessa che
+# usa `cerca.py --colonne`. Gli identificativi interni, le coordinate e i
+# timestamp servono a verificare un dato sospetto, non a scegliere un medico, e
+# in mezzo alle altre obbligano a scorrere di lato per arrivare al prezzo.
+tecniche = st.checkbox("Mostra le colonne tecniche (id, coordinate, data di "
+                       "scraping)", value=False, key="mostra_tecniche")
+df = df[colonne_visibili(results, tecniche=tecniche)]
 
 # `width="stretch"` e non `use_container_width=True`: quest'ultimo e' deprecato
 # da Streamlit 1.49 e la data di rimozione annunciata e' gia' passata — resta un
@@ -442,24 +479,34 @@ st.dataframe(df, width="stretch", hide_index=True,
                           "niente agenda online, si prenota per telefono."),
              })
 
+# L'export contiene SEMPRE tutte le colonne, comprese quelle nascoste sopra e i
+# nomi grezzi delle sorgenti: un file di dati serve a rileggerlo altrove, e
+# `id`/`lat`/`data_scraping` sono proprio le colonne che li' servono. E' anche
+# quello che scrive `cerca.py --export`, byte per byte le stesse colonne
+# nello stesso ordine.
+df_export = pd.DataFrame(results)
 col_csv, col_jsonl = st.columns(2)
 col_csv.download_button(
     "⬇️ Esporta CSV",
-    data=df.to_csv(index=False).encode("utf-8-sig"),
+    data=df_export.to_csv(index=False).encode("utf-8-sig"),
     file_name=f"medici_{f_ordina}.csv",
     mime="text/csv",
+    help="Con BOM, così Excel apre gli accenti e l'€ senza chiedere niente.",
 )
 col_jsonl.download_button(
     "⬇️ Esporta JSON Lines",
     # `or ""`: senza un file di destinazione `to_json` restituisce sempre la
     # stringa, ma e' dichiarato Optional (scrivendo su file torna None) e
     # `download_button` non accetta None.
-    data=df.to_json(orient="records", lines=True, force_ascii=False) or "",
+    data=df_export.to_json(orient="records", lines=True, force_ascii=False) or "",
     file_name=f"medici_{f_ordina}.jsonl",
     mime="application/x-ndjson",
     help="Un oggetto per riga: un file interrotto a metà scaricamento resta "
          "comunque leggibile fino all'ultima riga completa.",
 )
+st.caption("Gli export contengono tutte le colonne — anche quelle tecniche "
+           "nascoste qui sopra — perché servono a rileggere i dati altrove. "
+           "È lo stesso file di `python cerca.py cerca … --export nome.csv`.")
 
 st.caption(f"Prezzo pubblicato: {s['con_prezzo']} risultati su {s['totale']}. "
            "I prezzi sono pubblicati solo da una minoranza dei medici (limite della "
