@@ -11,15 +11,15 @@ di corrispondenza fra le due interfacce e' nel README.
 
 Esempi:
   # Scrape (popola il DB)
-  python cerca.py scrape --specializzazione podologo --citta Milano
-  python cerca.py scrape --specializzazione podologo --citta Milano --disponibilita
+  python cerca.py scrape --specializzazione cardiologo --citta Milano
+  python cerca.py scrape --specializzazione cardiologo --citta Milano --disponibilita
 
   # Consulta (legge dal DB)
-  python cerca.py cerca --specializzazione podologo --citta Milano --ordina prezzo --limite 20
-  python cerca.py cerca --specializzazione podologo --citta Milano --ordina rating --min-recensioni 50
-  python cerca.py cerca --specializzazione podologo --citta Milano --disponibile-entro 3 --ordina prezzo
-  python cerca.py cerca --specializzazione podologo --citta Milano --ordina distanza --vicino-a 45.4642,9.1900
-  python cerca.py cerca --ricerca podologo Milano --colonne tutte
+  python cerca.py cerca --specializzazione cardiologo --citta Milano --ordina prezzo --limite 20
+  python cerca.py cerca --specializzazione cardiologo --citta Milano --ordina rating --min-recensioni 50
+  python cerca.py cerca --specializzazione cardiologo --citta Milano --disponibile-entro 3 --ordina prezzo
+  python cerca.py cerca --specializzazione cardiologo --citta Milano --ordina distanza --vicino-a 45.4642,9.1900
+  python cerca.py cerca --ricerca cardiologo Milano --colonne tutte
   python cerca.py cerca ... --export risultati.csv
 
   # Cosa c'e' nel database
@@ -386,7 +386,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sc = sub.add_parser("scrape", help="Scarica i dati nel DB locale")
     sc.add_argument("--specializzazione", required=True,
-                    help="Come la scrivi sul portale (es. podologo). I portali "
+                    help="Come la scrivi sul portale (es. cardiologo). I portali "
                          "non la chiamano allo stesso modo: la traduzione è "
                          "automatica e, se fallisce, l'errore elenca le alternative")
     sc.add_argument("--citta", required=True, help="Città da cercare (es. Milano)")
@@ -412,7 +412,7 @@ def build_parser() -> argparse.ArgumentParser:
     ce.add_argument("--ricerca", nargs=2, metavar=("SPEC", "CITTA"), default=None,
                     help="Mostra SOLO uno scaricamento preciso, confrontando "
                          "esatti i termini con cui è stato lanciato: "
-                         "--ricerca podologo Milano. Serve dopo aver scaricato "
+                         "--ricerca cardiologo Milano. Serve dopo aver scaricato "
                          "più specializzazioni, quando --specializzazione (che "
                          "allarga) le mescolerebbe. Equivale alla vista «stai "
                          "vedendo solo la ricerca X/Y» della GUI; l'elenco è in "
@@ -420,7 +420,7 @@ def build_parser() -> argparse.ArgumentParser:
     _aggiungi_fonte(ce, "Da quali portali mostrare i risultati già scaricati.")
     ce.add_argument("--servizio",
                     help="Parole chiave del servizio, in qualsiasi ordine: "
-                         "'visita controllo' trova anche 'Visita podologica di "
+                         "'visita controllo' trova anche 'Visita cardiologica di "
                          "controllo'")
     ce.add_argument("--prezzo-max", type=float, default=None,
                     help="Spesa massima in € (esclude chi non pubblica il prezzo)")

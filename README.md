@@ -21,7 +21,7 @@ in una riga sola con i prezzi affiancati (`--unifica`).
 
 ```bash
 pip install -r requirements.txt
-python cerca.py scrape --specializzazione podologo --citta Milano   # scarica
+python cerca.py scrape --specializzazione cardiologo --citta Milano   # scarica
 python cerca.py cerca --citta Milano --ordina prezzo --limite 20    # consulta
 streamlit run app.py                                                # o con la GUI
 ```
@@ -118,7 +118,7 @@ Vanno **prima** del comando (`python cerca.py --verbose scrape …`).
 
 | Opzione | Default | Cosa fa |
 |---|---|---|
-| `--specializzazione TESTO` | **obbligatoria** | Come la scrivi sul portale (`podologo`, `cardiologo`) |
+| `--specializzazione TESTO` | **obbligatoria** | Come la scrivi sul portale (`cardiologo`, `dermatologo`) |
 | `--citta TESTO` | **obbligatoria** | Città da cercare (`Milano`) |
 | `--fonte NOME [NOME…]` | `tutte` | Portali da interrogare: `miodottore`, `doctolib`, `tutte`. Ripetibile: `--fonte miodottore doctolib` |
 | `--max-pagine N` | `40` | Quante pagine di risultati scaricare al massimo |
@@ -127,10 +127,10 @@ Vanno **prima** del comando (`python cerca.py --verbose scrape …`).
 
 ```bash
 # Solo anagrafica + prezzi, su tutti i portali registrati (default)
-python cerca.py scrape --specializzazione podologo --citta Milano
+python cerca.py scrape --specializzazione cardiologo --citta Milano
 
 # Anche disponibilità (endpoint disallowed su entrambi i siti — vedi robots.txt)
-python cerca.py scrape --specializzazione podologo --citta Milano --disponibilita --giorni 5
+python cerca.py scrape --specializzazione cardiologo --citta Milano --disponibilita --giorni 5
 
 # Su un portale specifico
 python cerca.py scrape --specializzazione cardiologo --citta Milano --fonte doctolib
@@ -139,7 +139,7 @@ python cerca.py scrape --specializzazione cardiologo --citta Milano --fonte doct
 python cerca.py scrape --specializzazione cardiologo --citta Milano --fonte miodottore doctolib
 
 # Smoke test prima di un run grande: una pagina sola, con il log aperto
-python cerca.py --verbose scrape --specializzazione podologo --citta Milano --max-pagine 1
+python cerca.py --verbose scrape --specializzazione cardiologo --citta Milano --max-pagine 1
 ```
 
 I due siti non chiamano le specializzazioni allo stesso modo: `dermatologo`
@@ -148,7 +148,7 @@ traduzione è automatica e, quando non riesce, l'errore **elenca le alternative*
 invece di restituire zero risultati in silenzio.
 
 Se quella ricerca è già nel DB, `scrape` lo dice prima di partire («hai già dati
-di podologo/Milano di 3 h fa») e propone il comando per rivederli senza
+di cardiologo/Milano di 3 h fa») e propone il comando per rivederli senza
 riscaricarli. È una nota, non un blocco: aggiornare resta una tua scelta.
 
 Rieseguire `scrape` sulla stessa coppia specializzazione/città **aggiorna** i
@@ -222,17 +222,17 @@ file di dati serve a rileggerlo altrove, e sono proprio gli identificativi e le
 coordinate a servire lì.
 
 ```bash
-# Il podologo/indirizzo più economico
-python cerca.py cerca --specializzazione podologo --citta Milano --ordina prezzo --limite 20
+# Il cardiologo/indirizzo più economico
+python cerca.py cerca --specializzazione cardiologo --citta Milano --ordina prezzo --limite 20
 
 # Ordina per rating, solo chi ha ≥50 recensioni
-python cerca.py cerca --specializzazione podologo --citta Milano --ordina rating --min-recensioni 50
+python cerca.py cerca --specializzazione cardiologo --citta Milano --ordina rating --min-recensioni 50
 
 # Chi ha uno slot entro 3 giorni, ordinato per prezzo
-python cerca.py cerca --specializzazione podologo --citta Milano --disponibile-entro 3 --ordina prezzo
+python cerca.py cerca --specializzazione cardiologo --citta Milano --disponibile-entro 3 --ordina prezzo
 
 # Più vicino a un punto (lat,lng), es. Duomo di Milano
-python cerca.py cerca --specializzazione podologo --citta Milano --ordina distanza --vicino-a 45.4642,9.1900
+python cerca.py cerca --specializzazione cardiologo --citta Milano --ordina distanza --vicino-a 45.4642,9.1900
 
 # Un servizio entro un budget — nessuna nuova richiesta al sito, filtra il DB
 python cerca.py cerca --servizio "visita controllo" --prezzo-max 50
@@ -240,20 +240,20 @@ python cerca.py cerca --servizio "visita controllo" --prezzo-max 50
 # Confronta i due portali: una riga per medico, prezzo minimo, chi lo pratica
 python cerca.py cerca --specializzazione cardiologo --citta Milano --unifica
 
-# Solo l'ultimo scaricamento di podologo/Milano, con tutte le colonne utili
-python cerca.py cerca --ricerca podologo Milano --colonne tutte
+# Solo l'ultimo scaricamento di cardiologo/Milano, con tutte le colonne utili
+python cerca.py cerca --ricerca cardiologo Milano --colonne tutte
 
 # Esporta il risultato filtrato in CSV
-python cerca.py cerca --specializzazione podologo --citta Milano --ordina prezzo --export risultati.csv
+python cerca.py cerca --specializzazione cardiologo --citta Milano --ordina prezzo --export risultati.csv
 
 # Esporta in JSON Lines (formato scelto dall'estensione): un oggetto per riga,
 # cosi' un export interrotto a meta' resta comunque leggibile fino all'ultima
 # riga completa
-python cerca.py cerca --specializzazione podologo --citta Milano --ordina prezzo --export risultati.jsonl
+python cerca.py cerca --specializzazione cardiologo --citta Milano --ordina prezzo --export risultati.jsonl
 ```
 
 `--servizio` cerca **per parole, in qualsiasi ordine**: `"visita controllo"`
-trova sia «Visita podologica di controllo» sia «Visita di controllo podologica».
+trova sia «Visita cardiologica di controllo» sia «Visita di controllo cardiologica».
 Le preposizioni (`di`, `della`, …) vengono ignorate.
 
 `cerca` legge **solo il database locale**: cambiare servizio, prezzo o
@@ -290,8 +290,8 @@ Ricerche già scaricate (3):
 │ Fonte      │ Specializzazione   │ Città   │   Righe │ Scaricata           │ Età   │
 ├────────────┼────────────────────┼─────────┼─────────┼─────────────────────┼───────┤
 │ Doctolib   │ cardiologo         │ Milano  │      96 │ 2026-08-06 11:29:44 │ 2 h   │
-│ MioDottore │ podologo           │ Milano  │     214 │ 2026-08-05 09:12:03 │ 28 h  │
-│ Doctolib   │ podologo           │ Milano  │     102 │ 2026-08-05 09:10:51 │ 28 h  │
+│ MioDottore │ dermatologo        │ Milano  │     214 │ 2026-08-05 09:12:03 │ 28 h  │
+│ Doctolib   │ dermatologo        │ Milano  │     102 │ 2026-08-05 09:10:51 │ 28 h  │
 └────────────┴────────────────────┴─────────┴─────────┴─────────────────────┴───────┘
 Rivedile senza riscaricare nulla: python cerca.py cerca --ricerca <specializzazione> <città>
 ```
@@ -448,7 +448,7 @@ Lo scraper non conosce nessun sito: chiede pagine a una **`Sorgente`** e riceve
 `Sorgente` e registrarla — CLI e GUI la mostrano da sole, senza altre modifiche.
 
 ```bash
-python cerca.py scrape --specializzazione podologo --citta Milano --fonte miodottore
+python cerca.py scrape --specializzazione cardiologo --citta Milano --fonte miodottore
 python cerca.py cerca --fonte tutte --ordina prezzo     # default: tutte
 ```
 
@@ -502,8 +502,8 @@ prenotabile, e uno scarto di 80 € sullo stesso medico è di per sé un'informa
 (listini non allineati, un prezzo vecchio da una parte). Quando invece i portali
 quotano **prestazioni diverse** — capita: la prima visita su uno, un trattamento
 specifico sull'altro — il nome della prestazione compare accanto a ogni prezzo
-(`Doctolib 50 € (Prima visita podologica) · MioDottore 70 € (Trattamento
-onicocriptosi)`), perché altrimenti i due numeri si leggerebbero come uno scarto
+(`Doctolib 50 € (Prima visita cardiologica) · MioDottore 70 € (Elettrocardiogramma)`),
+perché altrimenti i due numeri si leggerebbero come uno scarto
 di listino sulla stessa cosa. Se un portale non pubblica il prezzo, il cluster dice «n/d» invece di
 riempire il buco con il valore dell'altro.
 

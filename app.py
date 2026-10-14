@@ -79,7 +79,7 @@ def annullamento_richiesto() -> bool:
 
 # Quale sottoinsieme del database sta guardando l'utente. La tabella mostra
 # tutte le ricerche insieme, quindi dopo aver scaricato «dentista» le sue righe
-# arriverebbero in mezzo a quelle di «podologo»: questa vista le separa senza
+# arriverebbero in mezzo a quelle di «cardiologo»: questa vista le separa senza
 # cancellare niente dal DB (riscaricarle costa ore di richieste ai portali).
 VISTA_TUTTO = None          # tutte le ricerche presenti
 VISTA_VUOTA = "__vuota__"   # nessuna: tabella pulita, in attesa di una ricerca
@@ -138,7 +138,7 @@ DB_SCELTO = db_scelto.strip() or None
 
 st.sidebar.header("1. Scraping (popola il DB)")
 with st.sidebar.form("scrape_form"):
-    sc_spec = st.text_input("Specializzazione", value="podologo")
+    sc_spec = st.text_input("Specializzazione", value="", placeholder="es. cardiologo")
     sc_citta = st.text_input("Città", value="Milano")
     # L'elenco viene dal registro delle sorgenti: registrarne una nuova la fa
     # comparire qui senza toccare la GUI.
@@ -164,8 +164,8 @@ st.sidebar.caption("Per fermarlo: **Stop** in alto a destra. I dati già "
 
 # Quanto sono vecchi i dati di QUESTA ricerca: senza, l'unico modo per saperlo
 # era riscaricare tutto — cioe' proprio la cosa che si voleva evitare.
-_eta = (None if _MANCANTI
-        else storage_corrente(DB_SCELTO).eta_dati_ore(sc_spec, sc_citta))
+_eta = (None if _MANCANTI or not sc_spec.strip()
+        else storage_corrente(DB_SCELTO).eta_dati_ore(sc_spec.strip(), sc_citta.strip()))
 if _eta is not None:
     if _eta < 1:
         st.sidebar.success(f"Dati di {sc_spec}/{sc_citta} aggiornati "
@@ -177,7 +177,9 @@ if _eta is not None:
         st.sidebar.warning(f"Dati di {sc_spec}/{sc_citta} di "
                            f"{int(_eta / 24)} giorni fa.")
 
-if submitted and not sc_fonti:
+if submitted and not sc_spec.strip():
+    st.warning("Inserisci una specializzazione da cercare.")
+elif submitted and not sc_fonti:
     st.warning("Seleziona almeno un portale da interrogare.")
 elif submitted:
     # Uno spinner con testo fisso non distingue "sta lavorando" da "e' piantato".
@@ -247,7 +249,7 @@ elif submitted:
             st.success(msg)
 
     # Chi ha appena scaricato «dentista» vuole vedere i dentisti, non ritrovarli
-    # sparsi in mezzo ai podologi di ieri. Le altre ricerche restano nel DB, a un
+    # sparsi in mezzo ai cardiologi di ieri. Le altre ricerche restano nel DB, a un
     # clic di distanza.
     if any(rep.righe for rep in reports):
         st.session_state["vista"] = (sc_spec, sc_citta)
@@ -296,7 +298,7 @@ f_citta = st.sidebar.text_input("Città (filtro)", value="", key="f_citta")
 f_serv = st.sidebar.text_input(
     "Servizio (parole chiave)", value="", key="f_serv",
     help="Cerca per parole, in qualsiasi ordine: «visita controllo» trova sia "
-         "«Visita podologica di controllo» sia «Visita di controllo podologica».")
+         "«Visita cardiologica di controllo» sia «Visita di controllo cardiologica».")
 servizi = [] if _MANCANTI else storage.servizi_noti()
 if servizi:
     scelto = st.sidebar.selectbox("…oppure scegli tra quelli trovati",
