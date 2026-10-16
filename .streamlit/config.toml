@@ -1,0 +1,11 @@
+# Configurazione della GUI (`streamlit run app.py`), letta da Streamlit quando
+# viene lanciato da questa cartella.
+
+[client]
+# Il tasto «Deploy» e il menu da sviluppatore non servono a un'app che gira solo
+# in locale. Rerun, impostazioni e tema restano nel menu ⋮.
+toolbarMode = "minimal"
+
+[browser]
+# Nessuna statistica d'uso inviata a Streamlit.
+gatherUsageStats = false

@@ -180,6 +180,10 @@ def parse_search_html(html) -> List[Riga]:
         tipo = card.get("data-ga4-entity-type") or card.get("data-test-entity-type")
         rating = _f(card.get("data-eec-stars-rating"))
         n_rec = _i(card.get("data-eec-opinions-count"))
+        if rating == 0 and not n_rec:
+            # Senza recensioni il sito scrive 0 stelle: non e' un voto pessimo,
+            # e' l'assenza di un voto. Come 0 sembrava il medico peggiore.
+            rating = None
         specializ = card.get("data-eec-specialization-name")
         citta_card = card.get("data-eec-address-cities")
         ha_cal = card.has_attr("data-eec-has-calendar")

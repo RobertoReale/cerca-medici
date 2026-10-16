@@ -47,6 +47,17 @@ def test_prezzi_simbolici_gia_salvati_vengono_corretti(tmp_path):
     st.close()
 
 
+def test_zero_stelle_senza_recensioni_non_e_un_voto(tmp_path):
+    st = Storage(tmp_path / "t.db")
+    r = _riga()
+    r.rating, r.n_recensioni = 0.0, 0
+    st.insert_righe([r], "podologo", "Milano")
+    st.close()
+    st = Storage(tmp_path / "t.db")
+    assert st.query("SELECT rating FROM risultati")[0]["rating"] is None
+    st.close()
+
+
 def test_uso_da_thread_diverso(tmp_path):
     st = Storage(tmp_path / "t.db")
     errori = []

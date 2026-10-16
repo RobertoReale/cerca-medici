@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import List, Optional, Sequence
 
 from .storage import Storage
@@ -347,6 +347,26 @@ def stats(results: Sequence[dict]) -> dict:
             "senza_prezzo": tot - con_prezzo}
 
 
+def search_con_totali(storage: Storage, f: Filtro) -> tuple[List[dict], dict]:
+    """I risultati entro `f.limite`, e le statistiche su TUTTI quelli che
+    rispondono ai filtri.
+
+    Calcolate sulle sole righe mostrate, le statistiche mentivano proprio nel
+    caso di default: ordinando per prezzo i NULL vanno in coda, quindi con un
+    limite di 100 si leggeva «100 con prezzo, 0 senza» su un DB in cui i senza
+    prezzo erano la maggioranza. `mostrati` dice quante righe sono state tenute.
+
+    L'ordine e' lo stesso di `search` con il limite: la stessa ORDER BY, tagliata
+    dopo invece che in SQL. Costa la lettura dell'intero sottoinsieme, che su
+    un DB di qualche migliaio di righe e' irrilevante.
+    """
+    tutti = search(storage, replace(f, limite=None))
+    s = stats(tutti)
+    mostrati = tutti[: f.limite] if f.limite else tutti
+    s["mostrati"] = len(mostrati)
+    return mostrati, s
+
+
 # --- colonne da mostrare ----------------------------------------------------
 # Quali colonne si vedono, e in che ordine, e' una decisione sola: stava scritta
 # due volte (una in `cerca.py`, una in `app.py`) e le due copie divergevano a
@@ -384,6 +404,12 @@ def colonne_visibili(righe: Sequence[dict], tecniche: bool = False) -> List[str]
         viste.update(dict.fromkeys(r.keys()))
     ordinate = [c for c in COLONNE_PRINCIPALI if c in viste]
     ordinate += [c for c in viste if c not in COLONNE_PRINCIPALI]
+    if "disponibile_su" in viste:
+        # A unificazione attiva «disponibile_su» dice gia' su quali portali c'e'
+        # il medico, e con quale prezzo: la fonte singola di una riga fusa e'
+        # solo quella del prezzo minimo, cioe' un dato a meta'. La tabella
+        # stretta della CLI faceva gia' cosi'.
+        ordinate = [c for c in ordinate if c != "sorgente"]
     if not tecniche:
         ordinate = [c for c in ordinate if c not in COLONNE_TECNICHE]
     return ordinate

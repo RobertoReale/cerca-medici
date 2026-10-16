@@ -37,11 +37,11 @@ from tabulate import tabulate
 
 from medici.storage import Storage
 from medici.query_engine import (
-    ORDINA, Filtro, avvisi, colonne_visibili, search, stats,
+    ORDINA, Filtro, avvisi, colonne_visibili, search_con_totali,
 )
 from medici.scraper import risolvi_sorgente, scrape_search
 from medici.sorgenti import elenco as sorgenti_disponibili, etichetta_di
-from medici.testo import console_utf8
+from medici.testo import console_utf8, n_pagine
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -144,7 +144,7 @@ def cmd_scrape(args) -> int:
         etichetta = etichetta_di(rep.sorgente)
         if rep.annullato:
             print(f"[{etichetta}] Interrotto: {rep.righe} righe salvate da "
-                  f"{rep.pagine} pagine.", file=sys.stderr)
+                  f"{n_pagine(rep.pagine)}.", file=sys.stderr)
         elif rep.bloccato:
             print(f"[{etichetta}] BLOCCATO: {rep.errore}", file=sys.stderr)
         elif rep.errore:
@@ -156,14 +156,14 @@ def cmd_scrape(args) -> int:
                 # Una raccolta fermata a meta' ha comunque salvato qualcosa:
                 # senza questa riga sembrerebbe che il run non abbia dato nulla.
                 print(f"[{etichetta}] {rep.righe} righe ({rep.nuove} nuove) da "
-                      f"{rep.pagine} pagine sono comunque nel database.")
+                      f"{n_pagine(rep.pagine)} sono comunque nel database.")
         elif rep.righe == 0:
             print(f"[{etichetta}] ATTENZIONE: 0 righe estratte. Città non "
                   f"riconosciuta o formato cambiato? Controlla con --verbose.",
                   file=sys.stderr)
         else:
             msg = (f"[{etichetta}] OK: {rep.righe} righe ({rep.nuove} nuove) da "
-                   f"{rep.pagine} pagine per {rep.specializzazione}/{rep.citta}")
+                   f"{n_pagine(rep.pagine)} per {rep.specializzazione}/{rep.citta}")
             if args.disponibilita:
                 msg += f", {rep.slot} slot di disponibilità"
                 if rep.nota_slot:
@@ -272,13 +272,12 @@ def cmd_cerca(args) -> int:
         # non lasciato dedurre da un elenco vuoto (vedi `query_engine.avvisi`).
         for avviso in avvisi(f, st):
             print(f"ATTENZIONE: {avviso}", file=sys.stderr)
-        results = search(st, f)
+        results, s = search_con_totali(st, f)
 
     if not results:
         print("Nessun risultato con questi filtri.")
         return 0
 
-    s = stats(results)
     if args.colonne == "base":
         rows = _righe_base(results, args)
     else:
@@ -292,6 +291,9 @@ def cmd_cerca(args) -> int:
     # Forma neutra: «1 su 1 risultati hanno» non si puo' leggere.
     print(f"\nPrezzo pubblicato: {s['con_prezzo']} risultati su {s['totale']} "
           f"(ordinamento: {args.ordina}).")
+    if s["mostrati"] < s["totale"]:
+        print(f"Mostrati i primi {s['mostrati']} di {s['totale']}: alza --limite "
+              f"(o toglilo) per vederli tutti.")
     if args.unifica:
         uniti = sum(1 for r in results if (r.get("n_fonti") or 1) > 1)
         print(f"{uniti} " + ("risultato è" if uniti == 1 else "risultati sono")

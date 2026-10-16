@@ -1,4 +1,4 @@
-"""app.py — GUI Streamlit per MioDottore scraper.
+"""app.py — GUI Streamlit di cerca-medici (MioDottore, Doctolib).
 
 Avvio:  streamlit run app.py
 
@@ -15,10 +15,11 @@ import streamlit as st
 
 from medici.storage import DEFAULT_DB, Storage
 from medici.query_engine import (
-    ORDINA, Filtro, avvisi, colonne_visibili, search, stats,
+    ORDINA, Filtro, avvisi, colonne_visibili, search_con_totali,
 )
 from medici.scraper import risolvi_sorgente, scrape_search
 from medici.sorgenti import elenco as sorgenti_disponibili, etichetta_di
+from medici.testo import n_pagine
 
 # Senza questo i log INFO dello scraper ("Pagina 3: 20 card -> 31 righe") non
 # comparivano da nessuna parte: ne' nella GUI ne' nel terminale di streamlit.
@@ -106,6 +107,10 @@ def azzera_filtri() -> None:
 
 def nuova_ricerca() -> None:
     azzera_filtri()
+    # «Ripartire con un'altra specializzazione»: lasciare scritta la vecchia
+    # nel modulo invitava a rilanciare la stessa ricerca. La citta' resta,
+    # perche' di solito e' quella che non cambia.
+    st.session_state.pop("sc_spec", None)
     st.session_state["vista"] = VISTA_VUOTA
 
 
@@ -138,7 +143,8 @@ DB_SCELTO = db_scelto.strip() or None
 
 st.sidebar.header("1. Scraping (popola il DB)")
 with st.sidebar.form("scrape_form"):
-    sc_spec = st.text_input("Specializzazione", value="", placeholder="es. cardiologo")
+    sc_spec = st.text_input("Specializzazione", value="", placeholder="es. cardiologo",
+                            key="sc_spec")
     sc_citta = st.text_input("Città", value="Milano")
     # L'elenco viene dal registro delle sorgenti: registrarne una nuova la fa
     # comparire qui senza toccare la GUI.
@@ -154,10 +160,21 @@ with st.sidebar.form("scrape_form"):
         "Max pagine", 1, 500, 5,
         help="Attenzione: un giro più corto del precedente considera «spariti» "
              "i medici delle pagine che non ha visitato, e li rimuove.")
-    sc_disp = st.checkbox("Raccogli disponibilità (endpoint /api/v3 — vedi README)")
-    sc_giorni = st.number_input("Giorni disponibilità", 1, 90, 5,
-                                help="Ha effetto solo con la casella qui sopra.")
-    submitted = st.form_submit_button("Avvia scraping")
+    # Un campo solo, con 0 = spento, come «Prezzo max» e «Disponibile entro»
+    # piu' sotto. Prima erano una casella e un numero, ma dentro un `st.form` la
+    # casella non puo' disattivare il numero (il form non riesegue lo script
+    # finche' non lo si invia): si poteva impostare «10 giorni» a casella
+    # spenta, senza che succedesse niente.
+    sc_giorni = st.number_input(
+        "Giorni di disponibilità (0 = non raccoglierle)", 0, 90, 0,
+        help="Oltre ad anagrafica e prezzi, scarica gli orari liberi dei "
+             "prossimi N giorni. Allunga lo scraping di 1–3 secondi per "
+             "indirizzo e usa endpoint che il robots.txt dei portali esclude "
+             "(vedi README). Doctolib ne restituisce al massimo 7, e in "
+             "pratica quasi sempre nessuno.")
+    sc_disp = sc_giorni > 0
+    submitted = st.form_submit_button("Avvia scraping", type="primary",
+                                      width="stretch")
 st.sidebar.caption("Per fermarlo: **Stop** in alto a destra. I dati già "
                    "scaricati restano nel database; poi ricarica la pagina "
                    "(Streamlit chiude la sessione dopo uno stop).")
@@ -247,7 +264,7 @@ elif submitted:
         elif rep.righe == 0:
             st.warning(f"{nome}: 0 righe. Città non riconosciuta o formato cambiato?")
         else:
-            msg = (f"{nome}: {rep.righe} righe da {rep.pagine} pagine "
+            msg = (f"{nome}: {rep.righe} righe da {n_pagine(rep.pagine)} "
                    f"({rep.nuove} nuove rispetto a prima).")
             if sc_disp:
                 msg += f" {rep.slot} slot di disponibilità."
@@ -315,36 +332,59 @@ if servizi:
     if scelto != "—" and not f_serv:
         f_serv = scelto
 c_min, c_max = st.sidebar.columns(2)
-f_prezzo_min = c_min.number_input("Prezzo min €", 0, 5000, 0, 10, key="f_prezzo_min")
-f_prezzo_max = c_max.number_input("Prezzo max € (0=off)", 0, 5000, 0, 10,
-                                  key="f_prezzo_max")
+f_prezzo_min = c_min.number_input("Prezzo min €", 0, 5000, 0, 10, key="f_prezzo_min",
+                                  help="0 = nessun minimo.")
+f_prezzo_max = c_max.number_input("Prezzo max €", 0, 5000, 0, 10, key="f_prezzo_max",
+                                  help="0 = nessun massimo.")
+# Le chiavi restano quelle di `ORDINA` (sono anche i valori di `--ordina`
+# nella CLI): qui cambia solo come si leggono.
+_NOMI_ORDINA = {"prezzo": "Prezzo", "rating": "Rating",
+                "recensioni": "Numero di recensioni",
+                "disponibilita": "Prima disponibilità", "distanza": "Distanza"}
 f_ordina = st.sidebar.selectbox(
     "Ordina per", list(ORDINA), key="f_ordina",
+    format_func=lambda k: _NOMI_ORDINA.get(str(k), str(k)),
     help="Ogni criterio ha il suo verso naturale (prezzo, disponibilità e "
          "distanza crescenti; rating e recensioni decrescenti) e tiene i valori "
          "mancanti in coda in entrambi i versi.")
 f_desc = st.sidebar.checkbox(
     "Inverti ordinamento", key="f_desc",
     help="Prezzo: dal più caro. Rating/recensioni: dal peggiore.")
-f_min_rec = st.sidebar.slider("Min recensioni", 0, 1000, 0, 10, key="f_min_rec")
-f_min_rating = st.sidebar.slider("Min rating", 0.0, 5.0, 0.0, 0.5, key="f_min_rating")
-f_solo_prezzo = st.sidebar.checkbox("Solo con prezzo pubblicato", key="f_solo_prezzo")
-f_solo_pren = st.sidebar.checkbox(
-    "Solo prenotabili online", key="f_solo_pren",
-    help="Esclude chi è elencato con il listino ma non ha attivato l'agenda "
-         "su MioDottore (sul profilo appare «Inattivo»: si prenota per telefono).")
 f_unifica = st.sidebar.checkbox(
     "Unisci lo stesso medico tra portali", key="f_unifica",
     help="Fonde in una riga sola le schede che i due portali hanno dello stesso "
          "medico (stesso cognome, sedi a meno di 150 m). Il prezzo mostrato è "
-         "il minimo; la colonna «disponibile_su» elenca quanto chiede ciascun "
+         "il minimo; la colonna «Disponibile su» elenca quanto chiede ciascun "
          "portale. Togli la spunta per rivedere le righe grezze.")
-f_entro = st.sidebar.number_input("Disponibile entro (giorni, 0=off)", 0, 30, 0,
-                                  key="f_entro")
-f_vicino = st.sidebar.text_input("Vicino a (lat,lng) per distanza", value="",
-                                 key="f_vicino")
-f_limite = st.sidebar.number_input("Limite risultati (0=tutti)", 0, 5000, 100,
-                                   key="f_limite")
+
+# I filtri che si usano di rado stanno in un riquadro chiuso: tutti aperti, la
+# barra superava i 2500 pixel. Il titolo dice quanti sono attivi, cosi' un
+# filtro dimenticato la' dentro non resta invisibile (e la riga «Filtri
+# attivi» sopra la tabella li elenca comunque per nome).
+_DEFAULT_ALTRI = {"f_min_rec": 0, "f_min_rating": 0.0, "f_solo_prezzo": False,
+                  "f_solo_pren": False, "f_entro": 0, "f_vicino": "",
+                  "f_limite": 100}
+_n_altri = sum(1 for k, v in _DEFAULT_ALTRI.items()
+               if st.session_state.get(k, v) != v)
+with st.sidebar.expander("Altri filtri" + (f" ({_n_altri} attivi)" if _n_altri else "")):
+    f_min_rec = st.number_input("Min recensioni", 0, 10000, 0, 5, key="f_min_rec")
+    f_min_rating = st.slider("Min rating", 0.0, 5.0, 0.0, 0.5, key="f_min_rating")
+    f_solo_prezzo = st.checkbox("Solo con prezzo pubblicato", key="f_solo_prezzo")
+    f_solo_pren = st.checkbox(
+        "Solo prenotabili online", key="f_solo_pren",
+        help="Esclude chi è elencato con il listino ma non ha un'agenda online: "
+             "si prenota solo per telefono.")
+    f_entro = st.number_input(
+        "Disponibile entro N giorni", 0, 90, 0, key="f_entro",
+        help="0 = nessun filtro. Funziona solo se le disponibilità sono state "
+             "raccolte durante lo scraping.")
+    f_vicino = st.text_input(
+        "Vicino a (lat,lng)", value="", key="f_vicino",
+        placeholder="45.4642,9.1900",
+        help="Aggiunge la colonna della distanza; con «Ordina per: Distanza» "
+             "mette in cima i più vicini.")
+    f_limite = st.number_input("Righe da mostrare (0 = tutte)", 0, 5000, 100,
+                               key="f_limite")
 
 
 def _vicino():
@@ -412,8 +452,10 @@ filtro = Filtro(
 for avviso in avvisi(filtro, storage):
     st.warning(avviso)
 
-results = search(storage, filtro)
-s = stats(results)
+# Statistiche su tutto cio' che risponde ai filtri, non sulle sole righe
+# mostrate: con il limite di 100 e l'ordine per prezzo si leggeva «100 con
+# prezzo, 0 senza» anche quando i senza prezzo erano la maggioranza.
+results, s = search_con_totali(storage, filtro)
 
 colonne = st.columns(4 if f_unifica else 3)
 colonne[0].metric("Risultati", s["totale"])
@@ -444,11 +486,15 @@ _attivi = [etichetta for attivo, etichetta in (
 ) if attivo]
 if _attivi:
     st.caption("Filtri attivi: " + " · ".join(_attivi)
-               + " — «Azzera i filtri» nella barra a sinistra li toglie tutti.")
+               + " — «🧹 Azzera solo i filtri» nella barra a sinistra li toglie "
+                 "tutti.")
 
 if not results:
     st.warning("Nessun risultato con questi filtri.")
     st.stop()
+if s["mostrati"] < s["totale"]:
+    st.caption(f"Mostrate le prime {s['mostrati']} righe su {s['totale']}: "
+               "alza «Righe da mostrare» in «Altri filtri» per vederle tutte.")
 
 df = pd.DataFrame(results)
 if "sorgente" in df.columns:
@@ -465,15 +511,33 @@ df = df[colonne_visibili(results, tecniche=tecniche)]
 # `width="stretch"` e non `use_container_width=True`: quest'ultimo e' deprecato
 # da Streamlit 1.49 e la data di rimozione annunciata e' gia' passata — resta un
 # avviso a ogni render finche' regge, poi smette di funzionare.
-st.dataframe(df, width="stretch", hide_index=True,
+# L'altezza di default mostra una decina di righe e lascia mezza pagina vuota
+# sotto: la tabella e' il contenuto principale, quindi cresce con le righe fino
+# a un tetto oltre il quale scorre al suo interno. 35 px a riga piu'
+# l'intestazione, come le disegna Streamlit.
+_ALTEZZA = min(35 * (len(df) + 1) + 3, 735)
+st.dataframe(df, width="stretch", hide_index=True, height=_ALTEZZA,
              column_config={
                  "sorgente": st.column_config.TextColumn("Fonte"),
+                 "nome": st.column_config.TextColumn("Nome"),
+                 "indirizzo": st.column_config.TextColumn("Indirizzo"),
+                 "citta": st.column_config.TextColumn("Città"),
+                 "servizio": st.column_config.TextColumn("Servizio"),
+                 "rating": st.column_config.NumberColumn("Rating", format="%.1f"),
+                 "specializzazione": st.column_config.TextColumn(
+                     "Specializzazione"),
+                 "provincia": st.column_config.TextColumn("Prov."),
+                 "tipo": st.column_config.TextColumn("Tipo"),
+                 "n_fonti": st.column_config.NumberColumn("Portali"),
                  "disponibile_su": st.column_config.TextColumn(
                      "Disponibile su",
                      help="Quanto chiede ciascun portale per questo medico. "
                           "«n/d» = quel portale non pubblica il prezzo, non "
                           "che il medico non c'è."),
-                 "url_profilo": st.column_config.LinkColumn("Profilo"),
+                 # Con l'URL per esteso la colonna spingeva la tabella oltre
+                 # il bordo destro, e restava visibile solo una «h».
+                 "url_profilo": st.column_config.LinkColumn(
+                     "Profilo", display_text="Apri"),
                  "prezzo": st.column_config.NumberColumn("Prezzo €", format="%.0f"),
                  "prezzo_e_da_min": st.column_config.CheckboxColumn(
                      "«da»",
@@ -486,8 +550,8 @@ st.dataframe(df, width="stretch", hide_index=True,
                      "Distanza km", format="%.1f"),
                  "ha_calendario": st.column_config.CheckboxColumn(
                      "Prenot. online",
-                     help="Senza spunta il profilo risulta «Inattivo»: "
-                          "niente agenda online, si prenota per telefono."),
+                     help="Senza spunta il medico non ha un'agenda online: "
+                          "si prenota per telefono."),
              })
 
 # L'export contiene SEMPRE tutte le colonne, comprese quelle nascoste sopra e i

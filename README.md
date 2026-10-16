@@ -342,7 +342,14 @@ stesse fasi della CLI:
 - **🧹 Azzera solo i filtri** — riporta i filtri ai valori iniziali senza
   toccare la tabella né il database.
 - **2. Filtri di ricerca** — gli stessi di `cerca.py cerca`, applicati **solo al
-  database**: cambiarli non fa partire nessuna richiesta ai portali.
+  database**: cambiarli non fa partire nessuna richiesta ai portali. Quelli
+  usati più di rado (recensioni, rating, disponibilità, distanza, numero di
+  righe) stanno nel riquadro «Altri filtri», che nel titolo dice quanti ne sono
+  attivi.
+
+I contatori sopra la tabella (risultati, con e senza prezzo) contano **tutto ciò
+che risponde ai filtri**, non solo le righe mostrate: se il limite ne nasconde
+qualcuna, una nota lo dice. Lo stesso vale per il riepilogo di `cerca.py cerca`.
 
 Per fermare uno scraping a metà: **Stop** in alto a destra (l'equivalente di
 `Ctrl-C`). I dati già scaricati restano nel database; poi ricarica la pagina,
@@ -370,7 +377,7 @@ il suo equivalente dall'altra parte.
 | Scaricare i dati | `scrape --specializzazione … --citta …` | 1. Scraping → «Avvia scraping» |
 | Scegliere i portali | `--fonte miodottore doctolib` | multiselect «Portali» (scraping) e «Fonti» (filtri) |
 | Limitare le pagine | `--max-pagine N` | «Max pagine» |
-| Raccogliere le disponibilità | `--disponibilita --giorni N` | casella «Raccogli disponibilità» + «Giorni disponibilità» |
+| Raccogliere le disponibilità | `--disponibilita --giorni N` | «Giorni di disponibilità» maggiore di 0 (0 = non raccoglierle) |
 | Fermare uno scraping | `Ctrl-C` | **Stop** in alto a destra |
 | Sapere cosa c'è già nel DB | `stato` | pannello «Dati già nel database» |
 | Sapere quanto sono vecchi i dati | colonna «Età» di `stato`; nota all'avvio di `scrape` | banner sopra il modulo di scraping |
@@ -381,11 +388,11 @@ il suo equivalente dall'altra parte.
 | Filtrare per servizio | `--servizio "visita controllo"` | «Servizio (parole chiave)» |
 | Prezzo, rating, recensioni | `--prezzo-min/--prezzo-max`, `--min-rating`, `--min-recensioni` | campi e slider omonimi |
 | Solo con prezzo / prenotabili | `--solo-con-prezzo`, `--solo-prenotabili` | caselle omonime |
-| Disponibili entro N giorni | `--disponibile-entro N` | «Disponibile entro (giorni, 0=off)» |
+| Disponibili entro N giorni | `--disponibile-entro N` | Altri filtri → «Disponibile entro N giorni» |
 | Ordinare | `--ordina …` + `--desc` | «Ordina per» + «Inverti ordinamento», o un clic sull'intestazione di colonna |
-| Ordinare per distanza | `--vicino-a 45.4642,9.1900` | «Vicino a (lat,lng) per distanza» |
+| Ordinare per distanza | `--vicino-a 45.4642,9.1900` | Altri filtri → «Vicino a (lat,lng)» |
 | Unire lo stesso medico tra portali | `--unifica` | «Unisci lo stesso medico tra portali» |
-| Limitare i risultati | `--limite N` | «Limite risultati (0=tutti)» |
+| Limitare i risultati | `--limite N` | Altri filtri → «Righe da mostrare (0 = tutte)» |
 | Vedere id, coordinate, date | `--colonne tecniche` | «Mostra le colonne tecniche» |
 | Esportare | `--export file.csv` / `file.jsonl` | «⬇️ Esporta CSV» / «⬇️ Esporta JSON Lines» |
 | Azzerare i filtri | non serve: ogni comando parte pulito | «🧹 Azzera solo i filtri» |

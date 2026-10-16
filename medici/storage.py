@@ -198,6 +198,11 @@ class Storage:
         self.conn.execute(
             "UPDATE risultati SET prezzo = NULL, prezzo_e_da_min = 0 "
             "WHERE prezzo > 0 AND prezzo < ?", (PREZZO_SIMBOLICO_SOTTO,))
+        # Stesso discorso per le «0 stelle» di chi non ha recensioni (vedi
+        # `parser.parse_search_html`): e' l'assenza di un voto, non un voto.
+        self.conn.execute(
+            "UPDATE risultati SET rating = NULL "
+            "WHERE rating = 0 AND COALESCE(n_recensioni, 0) = 0")
 
     def close(self) -> None:
         with self._lock:

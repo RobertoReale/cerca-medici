@@ -37,3 +37,9 @@ def console_utf8() -> None:
             riconfigura(encoding="utf-8")
         except (AttributeError, ValueError):
             pass
+
+
+def n_pagine(n: int) -> str:
+    """«1 pagina», «3 pagine»: l'esito di uno scraping da una pagina sola (il
+    caso dello smoke test) diceva «da 1 pagine»."""
+    return "1 pagina" if n == 1 else f"{n} pagine"

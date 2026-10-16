@@ -5,7 +5,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from medici.query_engine import (  # noqa: E402
-    _sort, avvisi, haversine_km, search, termini_servizio, Filtro)
+    _sort, avvisi, haversine_km, search, search_con_totali, termini_servizio,
+    Filtro)
 from medici.storage import Storage  # noqa: E402
 
 
@@ -238,3 +239,24 @@ if __name__ == "__main__":
             print(f"FAIL {fn.__name__}"); traceback.print_exc()
     print(f"\n{ok}/{len(funcs)} test passati")
     sys.exit(0 if ok == len(funcs) else 1)
+
+
+def test_statistiche_su_tutti_i_risultati_non_solo_sui_mostrati(tmp_path):
+    """Con il limite e l'ordine per prezzo i NULL finiscono tagliati: contare
+    solo le righe mostrate dava «tutti hanno un prezzo» su un DB in cui la
+    maggioranza non ce l'ha."""
+    st = _db(tmp_path, [("A", 30.0), ("B", 40.0), ("C", None), ("D", None),
+                        ("E", None)])
+    mostrati, s = search_con_totali(st, Filtro(ordina="prezzo", limite=2))
+    st.close()
+    assert [r["servizio"] for r in mostrati] == ["A", "B"]
+    assert s == {"totale": 5, "con_prezzo": 2, "senza_prezzo": 3, "mostrati": 2}
+
+
+def test_a_unificazione_attiva_la_fonte_lascia_il_posto_a_disponibile_su():
+    from medici.query_engine import colonne_visibili
+    grezze = [{"sorgente": "miodottore", "nome": "X", "prezzo": 30.0}]
+    unite = [{**grezze[0], "disponibile_su": "MioDottore 30 €"}]
+    assert "sorgente" in colonne_visibili(grezze)
+    assert "sorgente" not in colonne_visibili(unite)
+    assert colonne_visibili(unite)[0] == "disponibile_su"
