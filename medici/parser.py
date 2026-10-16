@@ -36,6 +36,25 @@ def _to_float(raw_num: str) -> Optional[float]:
         return None
 
 
+# Sotto questa cifra un prezzo non e' un prezzo: e' il segnaposto che alcuni
+# medici mettono per non pubblicare il listino. Visto sul campo: «1 €» su
+# MioDottore per visita + ECG + ecocolordoppler, che lo stesso medico su
+# Doctolib fa pagare 200 €. Preso per buono, finisce in cima a ogni ordinamento
+# per prezzo — proprio la funzione per cui esiste il progetto. Lo 0 resta: e'
+# «Prestazione gratuita», un'informazione vera.
+PREZZO_SIMBOLICO_SOTTO = 5.0
+
+
+def prezzo_plausibile(valore: Optional[float]) -> Optional[float]:
+    """`valore`, oppure None se e' un prezzo simbolico (vedi sopra).
+
+    Il testo originale resta in `prezzo_raw`: chi vuole verificare lo trova li'.
+    """
+    if valore is not None and 0 < valore < PREZZO_SIMBOLICO_SOTTO:
+        return None
+    return valore
+
+
 @dataclass
 class Prezzo:
     valore: Optional[float]  # None = non disponibile
@@ -51,6 +70,7 @@ def parse_prezzo(testo: Optional[str]) -> Prezzo:
     - "Prezzo non disponibile"    -> valore=None
     - "Prestazione gratuita"      -> valore=0.0
     - "50-90 €" (range)           -> valore=50 (minimo), e_da_min=True
+    - "1 €" (segnaposto)          -> valore=None (vedi `prezzo_plausibile`)
     """
     raw = (testo or "").strip()
     # Il sito usa NBSP ( ) e NARROW NBSP ( ) come separatore: li
@@ -74,7 +94,8 @@ def parse_prezzo(testo: Optional[str]) -> Prezzo:
     if not valori:
         return Prezzo(None, False, raw)
     # In un range prendiamo il minimo e marchiamo come "da".
-    return Prezzo(min(valori), e_da, raw)
+    valore = prezzo_plausibile(min(valori))
+    return Prezzo(valore, e_da and valore is not None, raw)
 
 
 # --- Parsing card -----------------------------------------------------------

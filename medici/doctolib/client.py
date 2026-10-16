@@ -322,8 +322,21 @@ class ClientDoctolib:
 
         Un calendario che non esiste non e' un errore: si ritorna [].
         """
+        return self.disponibilita(practice_id, visit_motive_id, agenda_ids,
+                                  giorni, start)[0]
+
+    def disponibilita(self, practice_id, visit_motive_id, agenda_ids: Sequence,
+                      giorni: int = 5, start: Optional[datetime] = None
+                      ) -> Tuple[List[dict], Optional[str]]:
+        """Come `slots`, piu' il `reason` con cui Doctolib spiega un calendario
+        vuoto («Al momento non offre il servizio di prenotazione online…»).
+
+        Serve perche' a ottobre 2026 e' la risposta a quasi tutti i calendari,
+        anche di chi la ricerca segna con `onlineBooking`: senza il motivo,
+        «0 slot» sembra un guasto del programma.
+        """
         if not agenda_ids:
-            return []
+            return [], None
         giorni = max(1, min(int(giorni), MAX_GIORNI_SLOT))
         start = start or datetime.now()
         params = {
@@ -344,7 +357,7 @@ class ClientDoctolib:
         except FetchError as e:
             log.debug("Nessuna disponibilita' per practice=%s motive=%s (%s)",
                       practice_id, visit_motive_id, e)
-            return []
+            return [], None
         fuori: List[dict] = []
         for giorno in dati.get("availabilities") or []:
             for iso in giorno.get("slots") or []:
@@ -353,7 +366,8 @@ class ClientDoctolib:
                     continue
                 data_g, resto = iso.split("T", 1)
                 fuori.append({"data": data_g, "orario": resto[:5]})
-        return fuori
+        motivo = dati.get("reason")
+        return fuori, (motivo.strip() or None) if isinstance(motivo, str) else None
 
 
 def _stampa_prova(spec_slug: str, city_slug: str) -> int:

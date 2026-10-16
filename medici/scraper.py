@@ -44,6 +44,9 @@ class RunReport:
     pagine: int
     righe: int
     slot: int = 0
+    # Perche' i calendari sono tornati vuoti, quando il portale lo dice: «0
+    # slot» da solo non distingue un guasto da medici che non prenotano online.
+    nota_slot: Optional[str] = None
     # Righe che il DB non aveva ancora: `righe` conta tutto il trovato, `nuove`
     # solo le novita' rispetto allo scaricamento precedente.
     nuove: int = 0
@@ -218,6 +221,7 @@ def scrape_search(
                 break
 
         tot_slot = 0
+        nota_slot = None
         interrotto = False
         if disponibilita and chiavi_slot:
             if not src.supporta_disponibilita:
@@ -237,6 +241,9 @@ def scrape_search(
                     tot_slot, interrotto = _raccogli_disponibilita(
                         racc, chiavi_slot, storage, src.nome,
                         giorni_disponibilita, progress=progress, annullato=stop)
+                    nota_slot = racc.riepilogo()
+                    if nota_slot:
+                        log.info("%s: %s", src.etichetta, nota_slot)
 
         # Solo ora che il nuovo giro e' andato a buon fine buttiamo il vecchio:
         # chi non compare piu' tra i risultati del sito esce dal DB.
@@ -250,7 +257,8 @@ def scrape_search(
                          rimosse, specializzazione, citta, src.nome)
 
         return report(pagine=pagina, righe=tot_righe, slot=tot_slot,
-                      nuove=nuove, annullato=interrotto, errore=incompleto)
+                      nota_slot=nota_slot, nuove=nuove, annullato=interrotto,
+                      errore=incompleto)
     finally:
         if own_storage:
             storage.close()

@@ -204,6 +204,27 @@ def test_nessuna_prenotazione_online_non_e_un_errore():
     assert c.slots(618888, 1, [2], giorni=7) == []
 
 
+def test_il_motivo_del_calendario_vuoto_viene_contato():
+    """«0 slot» da solo sembra un guasto: il riepilogo dice che sono i medici
+    a non prenotare online, e raggruppa i motivi nonostante il telefono diverso
+    che Doctolib mette in ogni testo."""
+    from medici.sorgenti import ChiaveSlot
+    from medici.sorgenti.doctolib import SorgenteDoctolib
+
+    vuota = json.loads((FIXTURES / "doctolib_availabilities_vuote.json")
+                       .read_text(encoding="utf-8"))
+    altra = dict(vuota, reason=vuota["reason"].replace("397000", "123456"))
+    senza_posti = {"availabilities": [], "total": 0,
+                   "reason": "Nessuna disponibilità online."}
+    f = FetcherFinto([_res(vuota), _res(altra), _res(senza_posti)])
+    racc = SorgenteDoctolib(client=ClientDoctolib(fetcher=f)).raccoglitore_slot(None)
+    assert racc is not None and racc.riepilogo() is None
+    for i in range(3):
+        assert racc.slots(ChiaveSlot(str(i), "1", (2, (3,))), 7) == []
+    assert racc.riepilogo() == ("calendari vuoti: 2 non accettano prenotazioni "
+                                "online, 1 senza posti liberi nel periodo")
+
+
 def test_senza_agende_non_si_chiama_nemmeno_l_endpoint():
     f = FetcherFinto([])          # qualunque richiesta farebbe fallire il test
     assert ClientDoctolib(fetcher=f).slots(1, 2, [], giorni=7) == []

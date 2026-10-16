@@ -18,7 +18,7 @@ import threading
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence
 
-from .parser import Riga
+from .parser import PREZZO_SIMBOLICO_SOTTO, Riga
 
 _DATA = Path(__file__).resolve().parent.parent / "data"
 DEFAULT_DB = _DATA / "medici.db"
@@ -143,7 +143,7 @@ class Storage:
     protegge dall'interleaving di execute+commit tra thread.
     """
 
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Optional[Path | str] = None):
         self.db_path = _percorso_effettivo(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
@@ -192,6 +192,12 @@ class Storage:
         # SCHEMA_INDICI ricrea le versioni `_v2` subito dopo.
         for nome in INDICI_OBSOLETI:
             self.conn.execute(f"DROP INDEX IF EXISTS {nome}")
+        # Prezzi simbolici salvati prima che il parser li riconoscesse (vedi
+        # `parser.prezzo_plausibile`). Idempotente, e non perde nulla: il
+        # testo originale resta in `prezzo_raw`.
+        self.conn.execute(
+            "UPDATE risultati SET prezzo = NULL, prezzo_e_da_min = 0 "
+            "WHERE prezzo > 0 AND prezzo < ?", (PREZZO_SIMBOLICO_SOTTO,))
 
     def close(self) -> None:
         with self._lock:

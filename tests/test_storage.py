@@ -30,6 +30,23 @@ def test_stessa_riga_su_piu_pagine_non_duplica(tmp_path):
     st.close()
 
 
+def test_prezzi_simbolici_gia_salvati_vengono_corretti(tmp_path):
+    """Un DB scaricato prima del filtro sui prezzi simbolici li ha salvati come
+    prezzi veri: riaprendolo vanno tolti, senza perdere il testo originale."""
+    st = Storage(tmp_path / "t.db")
+    st.insert_righe([_riga(prezzo=1.0), _riga(prezzo=0.0, servizio="Gratis"),
+                     _riga(servizio="Altro")], "podologo", "Milano")
+    st.close()
+    st = Storage(tmp_path / "t.db")
+    righe = {r["servizio"]: r for r in
+             st.query("SELECT servizio, prezzo, prezzo_raw FROM risultati")}
+    assert righe["Visita"]["prezzo"] is None
+    assert righe["Visita"]["prezzo_raw"] == "1.0 €"
+    assert righe["Gratis"]["prezzo"] == 0.0
+    assert righe["Altro"]["prezzo"] == 50.0
+    st.close()
+
+
 def test_uso_da_thread_diverso(tmp_path):
     st = Storage(tmp_path / "t.db")
     errori = []

@@ -22,12 +22,13 @@ Due differenze di sostanza rispetto a MioDottore, non di forma:
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ..doctolib.client import BASE_URL, ClientDoctolib, ContestoDoctolib
 from ..doctolib.slug import SlugNonRisolto, risolvi
 from ..fetcher import FetcherHTTP
-from ..parser import Riga
+from ..parser import Riga, prezzo_plausibile
 from . import (ChiaveSlot, Pagina, RaccoglitoreSlot, RicercaNonValida, Sorgente,
                registra)
 
@@ -102,7 +103,8 @@ def riga_da_medico(m: dict) -> Riga:
         provincia=None,
         servizio=mv.get("name"),
         servizio_id=_str(mv.get("visitMotiveId")),
-        prezzo=float(prezzo) if isinstance(prezzo, (int, float)) else None,
+        prezzo=(prezzo_plausibile(float(prezzo))
+                if isinstance(prezzo, (int, float)) else None),
         prezzo_e_da_min=e_da_min,
         # Ricostruito: l'API da' un numero, non una stringa. Serve a confrontare
         # a occhio le due fonti sullo stesso medico, quindi imita la forma di
@@ -124,14 +126,34 @@ def riga_da_medico(m: dict) -> Riga:
     )
 
 
+def _motivo_breve(motivo: Optional[str]) -> str:
+    """Il `reason` di Doctolib ridotto a una categoria da contare.
+
+    Il testo completo contiene il numero di telefono dello studio, quindi due
+    calendari chiusi per lo stesso motivo non avrebbero mai lo stesso testo.
+    """
+    if motivo and "non offre" in motivo.lower():
+        return "non accettano prenotazioni online"
+    return "senza posti liberi nel periodo"
+
+
 class _SlotDoctolib(RaccoglitoreSlot):
     def __init__(self, client: ClientDoctolib):
         self._client = client
+        self._vuoti: Counter = Counter()
+
+    def riepilogo(self) -> Optional[str]:
+        if not self._vuoti:
+            return None
+        parti = [f"{n} {motivo}" for motivo, n in self._vuoti.most_common()]
+        return f"calendari vuoti: {', '.join(parti)}"
 
     def slots(self, chiave: ChiaveSlot, giorni: int) -> List[dict]:
         visit_motive_id, agenda_ids = chiave.dati
-        grezzi = self._client.slots(chiave.address_id, visit_motive_id,
-                                    agenda_ids, giorni=giorni)
+        grezzi, motivo = self._client.disponibilita(
+            chiave.address_id, visit_motive_id, agenda_ids, giorni=giorni)
+        if not grezzi:
+            self._vuoti[_motivo_breve(motivo)] += 1
         # `prenotabile` e' sempre True: Doctolib pubblica solo gli orari liberi,
         # non ha l'equivalente del campo `booked` di MioDottore. Cio' che manca
         # e' occupato *oppure* fuori orario, e i due casi non si distinguono.

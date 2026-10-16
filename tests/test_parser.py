@@ -48,6 +48,18 @@ def test_prezzo_range():
     assert p.valore == 50.0 and p.e_da_min is True
 
 
+def test_prezzo_simbolico_non_e_un_prezzo():
+    """«1 €» e' il segnaposto di chi non pubblica il listino: come prezzo
+    finirebbe primo in ogni ordinamento. Il testo resta, il valore no."""
+    p = parse_prezzo("1\xa0€")
+    assert p.valore is None and p.raw == "1\xa0€"
+    assert parse_prezzo("da 1 €").e_da_min is False
+
+
+def test_prezzo_basso_ma_vero_resta():
+    assert parse_prezzo("5 €").valore == 5.0
+
+
 def test_prezzo_migliaia():
     p = parse_prezzo("1.200 €")
     assert p.valore == 1200.0

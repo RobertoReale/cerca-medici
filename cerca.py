@@ -104,14 +104,17 @@ def cmd_scrape(args) -> int:
     except ValueError:      # non siamo nel thread principale
         precedente = None
     reports = []
+    # Dove il portale ha davvero cercato, quando non e' cio' che si e' scritto
+    # («dentista» che su Doctolib e' `odontoiatra`, Roma che e' la sua citta'
+    # metropolitana): senza, la traduzione si vedrebbe solo con --verbose.
+    tradotte: dict = {}
     try:
         for nome in fonti:
             if fermato:
                 break
             src = risolvi_sorgente(nome)
-            print(f"[{src.etichetta}] Cerco su: "
-                  f"{src.url_ricerca(args.specializzazione, args.citta)}",
-                  file=sys.stderr)
+            annunciato = src.url_ricerca(args.specializzazione, args.citta)
+            print(f"[{src.etichetta}] Cerco su: {annunciato}", file=sys.stderr)
             reports.append(scrape_search(
                 args.specializzazione, args.citta,
                 sorgente=src,
@@ -124,6 +127,9 @@ def cmd_scrape(args) -> int:
                 progress=None if args.verbose else _progress_console,
                 annullato=lambda: bool(fermato),
             ))
+            risolto = src.url_ricerca(args.specializzazione, args.citta)
+            if risolto != annunciato:
+                tradotte[src.nome] = risolto
     finally:
         if precedente is not None:
             signal.signal(signal.SIGINT, precedente)
@@ -160,7 +166,11 @@ def cmd_scrape(args) -> int:
                    f"{rep.pagine} pagine per {rep.specializzazione}/{rep.citta}")
             if args.disponibilita:
                 msg += f", {rep.slot} slot di disponibilità"
+                if rep.nota_slot:
+                    msg += f" ({rep.nota_slot})"
             print(msg)
+            if rep.sorgente in tradotte:
+                print(f"[{etichetta}] Cercato come: {tradotte[rep.sorgente]}")
 
     if any(r.righe for r in reports):
         return 0

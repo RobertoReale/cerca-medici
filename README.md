@@ -55,7 +55,8 @@ streamlit run app.py                                                # o con la G
   `GET /api/v3/doctors/{id}/addresses/{addr}/slots`, autenticato con un `Bearer`
   token che il sito incorpora nell'HTML (`ZLApp.APICredentials.ACCESS_TOKEN`);
   su Doctolib via `GET /search/availabilities.json`, che non chiede
-  autenticazione.
+  autenticazione. **Su Doctolib, in pratica, quasi sempre vuote**: vedi
+  [Limiti dei dati](#limiti-dei-dati).
 - **Più portali**: ogni riga porta la colonna `sorgente`; si filtra e si
   confronta per fonte (vedi [Più portali](#più-portali---fonte)).
 - **Unificazione dei duplicati**: lo stesso medico su entrambi i portali
@@ -143,9 +144,14 @@ python cerca.py --verbose scrape --specializzazione cardiologo --citta Milano --
 ```
 
 I due siti non chiamano le specializzazioni allo stesso modo: `dermatologo`
-esiste su MioDottore e su Doctolib si chiama `dermatologo-venereologo`. La
-traduzione è automatica e, quando non riesce, l'errore **elenca le alternative**
-invece di restituire zero risultati in silenzio.
+esiste su MioDottore e su Doctolib si chiama `dermatologo-venereologo`,
+`dentista` è `odontoiatra`, `oculista` è `oftalmologo`. La traduzione è
+automatica solo quando è certa (una tabella di sinonimi, un nome contenuto in
+un solo slug, un refuso evidente come `cardiolgo`); negli altri casi l'errore
+**elenca le alternative** invece di scegliere al posto tuo. Lo stesso vale per
+le città: Doctolib conosce Roma solo come `citta-metropolitana-di-roma`, e la
+ricerca ripiega lì da sola. Quando il portale ha cercato con nomi diversi da
+quelli scritti, l'esito lo dice («Cercato come: …»).
 
 Se quella ricerca è già nel DB, `scrape` lo dice prima di partire («hai già dati
 di cardiologo/Milano di 3 h fa») e propone il comando per rivederli senza
@@ -573,6 +579,18 @@ sparire i dati già raccolti.
   diventa «una riga per medico/sede».
 - **Doctolib non pubblica la provincia** e per gli slot non distingue «occupato»
   da «agenda chiusa»: espone solo gli orari liberi.
+- **Disponibilità Doctolib quasi sempre vuote.** A ottobre 2026 l'endpoint
+  risponde «non offre il servizio di prenotazione online» alla grande
+  maggioranza dei calendari, anche di medici che la ricerca segna come
+  prenotabili (su 20 cardiologi e 25 psicologi a Milano: zero slot). Non è un
+  errore dello scraper: l'esito riporta il motivo («calendari vuoti: 15 non
+  accettano prenotazioni online, 2 senza posti liberi nel periodo»). Su
+  MioDottore le disponibilità arrivano regolarmente.
+- **Prezzi simbolici**: alcuni medici pubblicano «1 €» per non mostrare il
+  listino (lo stesso medico su Doctolib chiede 200 €). Sotto i 5 € il prezzo
+  viene trattato come non pubblicato, così non finisce in cima all'ordinamento;
+  il testo originale resta in `prezzo_raw`. Lo 0 («Prestazione gratuita»)
+  resta un prezzo.
 
 ### Robustezza
 
@@ -615,7 +633,9 @@ parser di quella sorgente può rompersi. Mitigazioni integrate:
   `python -m medici.filters <pagina_scaricata.html>`.
 - **Specializzazioni Doctolib**: rigenera `data/doctolib_specialita.json` con la
   stessa cadenza — `python -m medici.doctolib.slug --aggiorna` (130 slug dal
-  sitemap ufficiale). Serve ai suggerimenti quando uno slug non esiste.
+  sitemap ufficiale). Serve ai suggerimenti quando uno slug non esiste. I nomi
+  che i due portali danno in modo diverso alla stessa specializzazione stanno
+  invece in `SINONIMI` (`medici/doctolib/slug.py`), da aggiornare a mano.
 
 Sulle due sorgenti il rischio non è simmetrico: un selettore CSS che smette di
 matchare è **silenzioso** (0 righe, nessun errore), un campo JSON rinominato è

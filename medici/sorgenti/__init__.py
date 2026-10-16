@@ -107,6 +107,11 @@ class RaccoglitoreSlot(ABC):
         errore: si ritorna [].
         """
 
+    def riepilogo(self) -> Optional[str]:
+        """Perche' i calendari interrogati finora sono tornati vuoti, se il
+        portale lo dice. None = nulla da spiegare (o portale che tace)."""
+        return None
+
 
 class Sorgente(ABC):
     """Un portale interrogabile. Un'istanza per run (puo' tenere stato/sessione)."""

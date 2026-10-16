@@ -7,8 +7,9 @@ alternative si corregge in cinque secondi, «0 risultati» no.
 import pytest
 
 from medici.doctolib.client import ContestoDoctolib, LandingNonTrovata
-from medici.doctolib.slug import (SlugNonRisolto, candidati, carica_specialita,
-                                  risolvi, slug_dal_sitemap)
+from medici.doctolib.slug import (SINONIMI, SlugNonRisolto, accettabili,
+                                  candidati, carica_specialita, risolvi,
+                                  slug_dal_sitemap)
 
 # Un estratto dei 130 slug veri, scelto per contenere le insidie: due slug che
 # cominciano allo stesso modo, uno composto e uno che contiene una parola
@@ -165,3 +166,88 @@ def test_sito_che_non_risponde_non_e_colpa_dell_utente():
 def test_ricerca_incompleta():
     with pytest.raises(SlugNonRisolto):
         risolvi("", "Milano", client=ClientFinto([]), noti=NOTI)
+
+
+# --- traduzioni sbagliate viste sul campo -----------------------------------
+# Prima di `accettabili`, il primo candidato che rispondeva veniva preso per
+# buono: queste ricerche partivano senza errore sulla specializzazione sbagliata.
+
+# Le insidie vere dell'elenco completo: ogni nome di MioDottore qui sotto ha un
+# vicino ortografico o un contenitore che e' un'altra professione.
+NOTI_INSIDIE = NOTI + [
+    "dietista", "genetista", "odontoiatra", "ortodontista", "psicanalista",
+    "oftalmologo", "tecnico-ortopedico", "laboratorio", "otorinolaringoiatra",
+    "ematologo", "tecnico-radiologo", "radiologo-diagnostico",
+]
+
+
+@pytest.mark.parametrize("voluto,sbagliato", [
+    ("dentista", "dietista"),
+    ("oculista", "psicanalista"),
+    ("otorino", "laboratorio"),
+    ("ortopedico", "tecnico-ortopedico"),
+    ("radiologo", "tecnico-radiologo"),
+])
+def test_nessuna_traduzione_verso_un_altra_professione(voluto, sbagliato):
+    assert sbagliato not in accettabili(voluto, NOTI_INSIDIE)
+
+
+@pytest.mark.parametrize("voluto,giusto", [
+    ("dentista", "odontoiatra"),
+    ("oculista", "oftalmologo"),
+    ("ortopedico", "ortopedico-traumatologo"),
+    ("Medico di base", "medico-di-medicina-generale"),
+])
+def test_i_nomi_di_miodottore_trovano_il_sinonimo(voluto, giusto):
+    c = ClientFinto([(giusto, "milano")] + [(s, "milano") for s in NOTI_INSIDIE])
+    assert risolvi(voluto, "Milano", client=c, noti=NOTI_INSIDIE).spec_slug == giusto
+
+
+def test_contenimento_ambiguo_non_si_sceglie_da_solo():
+    """Due slug contengono la parola: decidere tocca all'utente."""
+    noti = ["tecnico-podologo", "podologo-sportivo"]
+    assert accettabili("podologo", noti) == []
+    assert set(candidati("podologo", noti)) == set(noti)
+
+
+def test_ogni_sinonimo_porta_a_uno_slug_vero():
+    """Un refuso nella tabella si manifesterebbe solo a runtime, come
+    «specializzazione sconosciuta» su un nome che invece e' giusto."""
+    noti = set(carica_specialita())
+    assert {v for v in SINONIMI.values() if v not in noti} == set()
+
+
+def test_somiglianza_bassa_resta_un_suggerimento():
+    """`dentista` somiglia a `dietista` (0.875): lo si propone, non lo si usa."""
+    noti = ["dietista"]
+    c = ClientFinto([("dietista", "milano"),
+                     ("medico-di-medicina-generale", "milano")])
+    with pytest.raises(SlugNonRisolto) as e:
+        risolvi("Dentistta", "Milano", client=c, noti=noti)
+    assert ("dietista", "milano") not in c.chiamate
+    assert "dietista" in e.value.alternative
+
+
+# --- citta' con un altro nome ------------------------------------------------
+
+def test_roma_esiste_solo_come_citta_metropolitana():
+    c = ClientFinto([("cardiologo", "citta-metropolitana-di-roma")],
+                    citta_valide=("citta-metropolitana-di-roma",))
+    ctx = risolvi("Cardiologo", "Roma", client=c, noti=NOTI)
+    assert ctx.city_slug == "citta-metropolitana-di-roma"
+
+
+def test_forma_alternativa_anche_dopo_aver_corretto_la_specializzazione():
+    c = ClientFinto([("dermatologo-venereologo", "citta-metropolitana-di-roma")])
+    ctx = risolvi("Dermatologo", "Roma", client=c, noti=NOTI)
+    assert (ctx.spec_slug, ctx.city_slug) == ("dermatologo-venereologo",
+                                              "citta-metropolitana-di-roma")
+
+
+def test_sonda_su_citta_ignota_da_la_colpa_alla_citta():
+    """Specializzazione e citta' sconosciute insieme: la sonda risolve la
+    specializzazione e inciampa sulla citta', quindi e' la citta' a essere
+    segnalata — non «sito cambiato»."""
+    c = ClientFinto([("medico-di-medicina-generale", "milano")])
+    with pytest.raises(SlugNonRisolto, match="citta"):
+        risolvi("inesistente", "Pinco", client=c, noti=NOTI)

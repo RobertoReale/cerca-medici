@@ -186,8 +186,9 @@ elif submitted:
     # Qui mostriamo l'URL interrogato e ogni passo man mano che avviene.
     with st.status(f"Scraping {sc_spec}/{sc_citta}…", expanded=True) as stato:
         sorgenti = [risolvi_sorgente(n) for n in sc_fonti]
+        annunciati = {s.nome: s.url_ricerca(sc_spec, sc_citta) for s in sorgenti}
         for _src in sorgenti:
-            st.caption(f"{_src.etichetta}: {_src.url_ricerca(sc_spec, sc_citta)}")
+            st.caption(f"{_src.etichetta}: {annunciati[_src.nome]}")
         barra = st.progress(0.0)
         riga_stato = st.empty()
 
@@ -218,6 +219,10 @@ elif submitted:
                 progress=avanzamento,
                 annullato=annullamento_richiesto))
         barra.progress(1.0)
+        # Dove il portale ha davvero cercato, se diverso da quanto annunciato
+        # (stessa regola della CLI: «dentista» che su Doctolib e' `odontoiatra`).
+        tradotte = {s.nome: u for s in sorgenti
+                    if (u := s.url_ricerca(sc_spec, sc_citta)) != annunciati[s.nome]}
         tot_righe = sum(r.righe for r in reports)
         esito = "complete" if tot_righe else "error"
         stato.update(label=f"Scraping {sc_spec}/{sc_citta}: {tot_righe} righe "
@@ -246,6 +251,10 @@ elif submitted:
                    f"({rep.nuove} nuove rispetto a prima).")
             if sc_disp:
                 msg += f" {rep.slot} slot di disponibilità."
+                if rep.nota_slot:
+                    msg += f" ({rep.nota_slot.capitalize()}.)"
+            if rep.sorgente in tradotte:
+                msg += f" Cercato come: {tradotte[rep.sorgente]}"
             st.success(msg)
 
     # Chi ha appena scaricato «dentista» vuole vedere i dentisti, non ritrovarli
